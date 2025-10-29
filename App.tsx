@@ -1,0 +1,379 @@
+
+import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { GoogleGenAI } from "@google/genai";
+import { useAudioRecorder } from './hooks/useAudioRecorder';
+import { ConversationBubble } from './components/ConversationBubble';
+import { BottomControls } from './components/BottomControls';
+import { Language, AppState, ConversationMessage, LanguagePair, MessageDirection, SystemMessage, ConversationBubbleMessage } from './types';
+import { transcribeAndTranslate, generateSpeech } from './services/geminiService';
+import { playPcmAudio } from './utils/audioUtils';
+
+// --- SVG Icons ---
+const BackIcon = ({ className = "w-6 h-6" }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className={className}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 9V5.25A2.25 2.25 0 0 1 10.5 3h6a2.25 2.25 0 0 1 2.25 2.25v13.5A2.25 2.25 0 0 1 16.5 21h-6a2.25 2.25 0 0 1-2.25-2.25V15m-3 0-3-3m0 0 3-3m-3 3H15" />
+  </svg>
+);
+const LeftRightArrowsIcon = ({ className = "w-5 h-5" }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className={className}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+    </svg>
+);
+const HistoryIcon = () => <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="currentColor"><path d="M0 0h24v24H0z" fill="none"/><path d="M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg>;
+const CloseIcon = ({ className = "w-6 h-6" }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className={className}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+  </svg>
+);
+
+const listeningPrompts: Record<string, string> = {
+    [Language.German]: "Übersetze...",
+    [Language.English]: "Translate...",
+    [Language.Spanish]: "Traducir...",
+    [Language.French]: "Traduire...",
+    [Language.Polish]: "Tłumacz...",
+    [Language.Turkish]: "Çevir...",
+    [Language.Romanian]: "Traduceți...",
+    [Language.Arabic]: "ترجم...",
+    [Language.Hindi]: "अनुवाद...",
+    [Language.Indonesian]: "Menerjemahkan...",
+    [Language.Italian]: "Traduci...",
+    [Language.Japanese]: "翻訳...",
+    [Language.Korean]: "번역...",
+    [Language.Portuguese]: "Traduzir...",
+    [Language.Russian]: "Перевести...",
+    [Language.Dutch]: "Vertalen...",
+    [Language.Thai]: "แปล...",
+    [Language.Vietnamese]: "Dịch...",
+    [Language.Ukrainian]: "Перекласти...",
+    [Language.Bengali]: "অনুবাদ...",
+    [Language.Tamil]: "மொழிபெயர்...",
+    [Language.Telugu]: "అనువదించు...",
+    [Language.Marathi]: "भाषांतर...",
+}
+
+const germanLanguageMap: Record<string, string> = {
+    [Language.English]: "Englisch",
+    [Language.German]: "Deutsch",
+    [Language.Spanish]: "Spanisch",
+    [Language.French]: "Französisch",
+    [Language.Polish]: "Polnisch",
+    [Language.Turkish]: "Türkisch",
+    [Language.Romanian]: "Rumänisch",
+    [Language.Arabic]: "Arabisch",
+    [Language.Hindi]: "Hindi",
+    [Language.Indonesian]: "Indonesisch",
+    [Language.Italian]: "Italienisch",
+    [Language.Japanese]: "Japanisch",
+    [Language.Korean]: "Koreanisch",
+    [Language.Portuguese]: "Portugiesisch",
+    [Language.Russian]: "Russisch",
+    [Language.Dutch]: "Niederländisch",
+    [Language.Thai]: "Thailändisch",
+    [Language.Vietnamese]: "Vietnamesisch",
+    [Language.Ukrainian]: "Ukrainisch",
+    [Language.Bengali]: "Bengalisch",
+    [Language.Tamil]: "Tamil",
+    [Language.Telugu]: "Telugu",
+    [Language.Marathi]: "Marathi",
+};
+
+const getLocalizedDisplayName = (lang: Language): string => {
+    const germanName = germanLanguageMap[lang];
+    const nativeName = lang.match(/\(([^)]+)\)/)?.[0] || '';
+    return `${germanName} ${nativeName}`.trim();
+};
+
+const cleanText = (text: string | undefined): string => {
+    if (!text) return "";
+    // Aggressively remove the word "undefined", case-insensitively, and clean up surrounding whitespace.
+    return text
+        .replace(/undefined/gi, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+};
+
+
+const App: React.FC = () => {
+  const [appState, setAppState] = useState<AppState>(AppState.IDLE);
+  const [languages, setLanguages] = useState<LanguagePair>({ langA: Language.German, langB: Language.English });
+  const [conversation, setConversation] = useState<ConversationMessage[]>([]);
+  const [autoPlayback, setAutoPlayback] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [langToChange, setLangToChange] = useState<'langA' | 'langB' | null>(null);
+  const [streamingMessageId, setStreamingMessageId] = useState<number | null>(null);
+  const aiRef = useRef<GoogleGenAI | null>(null);
+  const languagesRef = useRef(languages);
+  const prevLangB = useRef(languages.langB);
+
+  useEffect(() => {
+    languagesRef.current = languages;
+  }, [languages]);
+
+  useEffect(() => {
+    if (prevLangB.current !== languages.langB) {
+      setConversation(prev => {
+        if (prev.length > 0) {
+          const newMessage: SystemMessage = {
+            id: Date.now(),
+            type: 'SYSTEM',
+            text: `Translation language switched to ${getLocalizedDisplayName(languages.langB)}`,
+          };
+          return [...prev, newMessage];
+        }
+        return prev;
+      });
+    }
+    prevLangB.current = languages.langB;
+  }, [languages.langB]);
+
+  
+  useEffect(() => {
+    if (process.env.API_KEY) {
+        aiRef.current = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    }
+  }, []);
+  
+  const handleFinishedRecording = useCallback(async (audioBlob: Blob, duration: number) => {
+    setAppState(AppState.PROCESSING);
+    setError(null);
+    if (!aiRef.current) {
+        setError("Gemini AI not initialized. Please set API_KEY.");
+        setAppState(AppState.IDLE);
+        return;
+    }
+
+    try {
+      const currentLanguages = languagesRef.current;
+      const result = await transcribeAndTranslate(aiRef.current, audioBlob, currentLanguages.langA, currentLanguages.langB);
+      
+      const transcription = cleanText(result.transcription);
+      const translation = cleanText(result.translation);
+      
+      const sourceLanguage = result.sourceLanguage || currentLanguages.langA;
+      
+      if (!transcription && !translation) {
+          throw new Error("Received empty transcription and translation.");
+      }
+
+      const newBubble: ConversationBubbleMessage = {
+        id: Date.now(),
+        type: 'CONVERSATION',
+        direction: sourceLanguage === currentLanguages.langB ? MessageDirection.LEFT : MessageDirection.RIGHT,
+        sourceLang: sourceLanguage,
+        targetLang: sourceLanguage === currentLanguages.langA ? currentLanguages.langB : currentLanguages.langA,
+        transcription: transcription,
+        translation: translation,
+        audioDuration: duration,
+      };
+
+      setConversation(prev => [...prev, newBubble]);
+      setStreamingMessageId(newBubble.id);
+      setTimeout(() => setStreamingMessageId(null), duration);
+      
+      if (autoPlayback && translation) {
+        generateSpeech(aiRef.current, translation, newBubble.targetLang)
+          .then(audioData => {
+            setConversation(prev => prev.map(msg => 
+              msg.id === newBubble.id && msg.type === 'CONVERSATION' ? { ...msg, base64Audio: audioData } : msg
+            ));
+            playPcmAudio(audioData);
+          })
+          .catch(e => {
+            console.error("Failed to generate or play speech.", e);
+            setError("Die Übersetzung konnte nicht wiedergegeben werden.");
+          });
+      }
+
+    } catch (e) {
+      console.error(e);
+      setError("Entschuldigung, das habe ich nicht verstanden. Bitte erneut versuchen.");
+    } finally {
+      setAppState(AppState.IDLE);
+    }
+  }, [autoPlayback]);
+
+  const { isRecording, amplitude, startRecording, stopRecording } = useAudioRecorder(handleFinishedRecording);
+  
+  const handleMicToggle = () => {
+    if (appState === AppState.LISTENING) {
+      stopRecording();
+    } else if (appState === AppState.IDLE) {
+      if (!process.env.API_KEY) {
+        setError("API_KEY environment variable not set.");
+        return;
+      }
+      setError(null);
+      startRecording();
+      setAppState(AppState.LISTENING);
+    }
+  };
+  
+  const handleOpenModal = (langKey: 'langA' | 'langB') => {
+    setLangToChange(langKey);
+    setIsModalOpen(true);
+  };
+
+  const handleLanguageChange = (lang: Language, keyToChange: 'langA' | 'langB') => {
+    setLanguages(prev => {
+        const otherKey = keyToChange === 'langA' ? 'langB' : 'langA';
+        const otherLang = prev[otherKey];
+
+        if (otherLang === lang) {
+            // Swap if the selected language is the same as the other language
+            return {
+                ...prev,
+                [keyToChange]: lang,
+                [otherKey]: prev[keyToChange]
+            };
+        } else {
+            // Otherwise, just update the selected language
+            return { ...prev, [keyToChange]: lang };
+        }
+    });
+  };
+
+  const handleSelectLanguageFromModal = (lang: Language) => {
+    if (langToChange) {
+        handleLanguageChange(lang, langToChange);
+    }
+    setIsModalOpen(false);
+    setLangToChange(null);
+  };
+
+  const handleQuickSelect = (lang: Language) => {
+      const keyToChange = languages.langA === languagesRef.current.langA ? 'langB' : 'langA';
+      handleLanguageChange(lang, keyToChange);
+  };
+
+  const handleClearConversation = () => {
+    setConversation([]);
+    stopRecording();
+    setAppState(AppState.IDLE);
+  };
+
+  const handleReplayAudio = async (message: ConversationBubbleMessage) => {
+    if (!aiRef.current) return;
+    if (message.base64Audio) {
+      await playPcmAudio(message.base64Audio);
+    } else {
+      try {
+        const audioData = await generateSpeech(aiRef.current, message.translation, message.targetLang);
+        setConversation(conv => conv.map(m => m.id === message.id && m.type === 'CONVERSATION' ? {...m, base64Audio: audioData} : m));
+        await playPcmAudio(audioData);
+      } catch (e) {
+        console.error("Failed to generate speech for replay", e);
+        setError("Audio konnte nicht abgespielt werden.");
+      }
+    }
+  };
+
+  const QuickSelectButton: React.FC<{ lang: Language, onClick: (lang: Language) => void }> = ({ lang, onClick }) => (
+    <button onClick={() => onClick(lang)} className="flex items-center space-x-4 text-left bg-white text-[#464646] px-4 py-3 rounded-2xl w-full shadow-sm hover:bg-gray-50 transition-colors">
+        <HistoryIcon />
+        <span className="font-medium">{getLocalizedDisplayName(lang)}</span>
+    </button>
+  );
+
+  const quickSelectLanguages = [Language.Polish, Language.Turkish, Language.Romanian];
+
+  return (
+    <>
+      <div className="flex flex-col h-full font-sans bg-[#FDFBF6] text-[#464646]">
+        <header className="flex items-center justify-between p-2 md:px-4 shrink-0">
+           <button onClick={handleClearConversation} className={`p-2 rounded-full hover:bg-gray-200 transition-colors ${conversation.length > 0 ? 'visible' : 'invisible'}`}>
+            <BackIcon />
+           </button>
+           <h1 className="text-base font-medium tracking-wide text-center flex items-center gap-2">
+             <span>{getLocalizedDisplayName(languages.langA)}</span>
+             <LeftRightArrowsIcon />
+             <span>{getLocalizedDisplayName(languages.langB)}</span>
+           </h1>
+          <div className="flex items-center w-10">
+              {/* Placeholder for alignment */}
+          </div>
+        </header>
+
+        <main className="flex-1 overflow-y-auto p-4 space-y-4 hide-scrollbar">
+          {conversation.length === 0 && appState === AppState.IDLE && (
+             <div className="flex flex-col items-center justify-center h-full text-center px-4">
+                <div className="animate-fade-in-up" style={{ animationDuration: '0.5s' }}>
+                  <h2 className="text-4xl font-normal text-[#464646]">{listeningPrompts[languages.langA] || "Translate..."}</h2>
+                  <p className="text-4xl font-normal text-gray-400">{listeningPrompts[languages.langB] || "Translate..."}</p>
+                </div>
+                  <div className="w-full max-w-xs mt-12 space-y-3">
+                    {quickSelectLanguages.map((lang, index) => (
+                      <div key={lang} className="animate-fade-in-up" style={{ animationDelay: `${150 + index * 100}ms`, animationFillMode: 'backwards' }}>
+                        <QuickSelectButton lang={lang} onClick={handleQuickSelect} />
+                      </div>
+                    ))}
+                  </div>
+             </div>
+          )}
+          {conversation.map((msg) => {
+            if (msg.type === 'SYSTEM') {
+              return <SystemMessageBubble key={msg.id} message={msg} />;
+            }
+            return <ConversationBubble key={msg.id} message={msg} onReplay={handleReplayAudio} isStreaming={streamingMessageId === msg.id} />;
+          })}
+          <div className="h-4" />
+          {error && <div className="fixed bottom-28 left-1/2 -translate-x-1/2 text-center text-white p-3 bg-[#c3002d] rounded-xl shadow-lg animate-fade-in-up">{error}</div>}
+        </main>
+
+        <BottomControls 
+          appState={appState}
+          amplitude={amplitude}
+          languages={languages}
+          autoPlayback={autoPlayback}
+          onMicToggle={handleMicToggle}
+          onLanguageChange={handleOpenModal}
+          onAutoPlaybackToggle={() => setAutoPlayback(p => !p)}
+        />
+      </div>
+      <LanguageSelectionModal
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          onSelect={handleSelectLanguageFromModal}
+      />
+    </>
+  );
+};
+
+const LanguageSelectionModal: React.FC<{isOpen: boolean, onClose: () => void, onSelect: (lang: Language) => void}> = ({ isOpen, onClose, onSelect }) => {
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 animate-modal-bg-fade-in" onClick={onClose}>
+            <div className="bg-white rounded-3xl p-4 w-full max-w-sm m-4 flex flex-col relative animate-modal-content-pop-in" onClick={(e) => e.stopPropagation()}>
+                <div className="flex justify-between items-center mb-4 px-2">
+                    <h3 className="text-xl font-medium text-[#464646]">Sprache auswählen</h3>
+                    <button onClick={onClose} className="p-1 rounded-full text-gray-400 hover:bg-gray-200 hover:text-gray-600 transition-colors">
+                        <CloseIcon />
+                    </button>
+                </div>
+                <div className="max-h-80 overflow-y-auto hide-scrollbar scroll-fader pr-2">
+                    {Object.values(Language).map(lang => (
+                        <button
+                            key={lang}
+                            onClick={() => onSelect(lang)}
+                            className="w-full p-3 text-left rounded-lg text-[#464646] hover:bg-sky-100 transition-colors"
+                        >
+                            {getLocalizedDisplayName(lang)}
+                        </button>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const SystemMessageBubble: React.FC<{ message: SystemMessage }> = ({ message }) => (
+    <div className="flex justify-center my-2 animate-fade-in-up">
+        <div className="text-xs text-slate-500 bg-slate-100 rounded-full px-3 py-1">
+            {message.text}
+        </div>
+    </div>
+);
+
+export default App;

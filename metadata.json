@@ -1,0 +1,7 @@
+{
+  "name": "Geminus Translator",
+  "description": "A real-time bilingual conversation app powered by Gemini. Speak into your microphone and get instant audio translations, enabling seamless communication across languages.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
