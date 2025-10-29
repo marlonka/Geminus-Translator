@@ -1,20 +1,109 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
 
-# Run and deploy your AI Studio app
+# Geminus Translator
 
-This contains everything you need to run your app locally.
+Geminus Translator is a real-time, voice-driven bilingual conversation app powered by the Google Gemini API. It allows two people speaking different languages to communicate seamlessly. Simply select your languages, press start, and speak into your microphone. The app provides instant transcription and audio translation, displaying the conversation in a clean, chat-like interface.
 
-View your app in AI Studio: https://ai.studio/apps/drive/1qx0A1zSrQJ3kvcUE_A7Nx5lhUHZxACP6
+![Geminus Translator Screenshot](https://storage.googleapis.com/aistudio-o-prd-0-asia-northeast1-b-public/gallery/previews/Geminus-Translator.png)
 
-## Run Locally
+---
 
-**Prerequisites:**  Node.js
+## ✨ Features
 
+*   **Real-Time Translation**: Get instant voice-to-text transcription and text-to-text translation as you speak.
+*   **Voice-to-Voice Conversation**: The translated text is automatically converted back to speech and played aloud for a natural conversational flow.
+*   **Automatic Language Detection**: The app intelligently detects which of the two selected languages is being spoken and translates accordingly.
+*   **Voice Activity Detection (VAD)**: The microphone automatically stops recording after a pause in speech, streamlining the user experience.
+*   **Multi-Language Support**: Supports 23 languages for broad usability.
+*   **Interactive UI**: A modern, responsive interface built with React and Tailwind CSS, featuring smooth animations and clear visual feedback for different app states (listening, processing, idle).
+*   **Audio Controls**: Easily toggle auto-playback of translated audio.
+*   **Conversation History**: View the full conversation history and replay audio for any message.
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+---
+
+## 🚀 How It Works
+
+The application leverages the power of Gemini and modern web APIs to create a seamless translation experience:
+
+1.  **Audio Capture**: The app uses the `MediaRecorder` Web API to capture audio from the user's microphone in `webm/opus` format. A custom React hook, `useAudioRecorder`, manages the recording state and implements Voice Activity Detection (VAD) to automatically stop recording when the user finishes speaking.
+2.  **Transcription & Translation**: The captured audio `Blob` is converted to a Base64 string and sent to the **Gemini 2.5 Flash** model. A carefully crafted system instruction prompts the model to perform three tasks in a single API call:
+    *   Identify which of the two selected languages was spoken.
+    *   Transcribe the spoken audio into text.
+    *   Translate the transcription into the other selected language.
+    *   The model is instructed to return a structured JSON object, ensuring reliable data handling.
+3.  **Speech Synthesis (TTS)**: The translated text is then sent to the **Gemini 2.5 Flash TTS** model to generate high-quality, natural-sounding speech.
+4.  **Audio Playback**: The TTS model returns the audio as raw PCM data encoded in Base64. A utility function decodes this data into an `AudioBuffer` and plays it back using the Web Audio API for low-latency playback.
+5.  **Frontend Rendering**: The entire user interface is built with **React**. The application state (e.g., `IDLE`, `LISTENING`, `PROCESSING`) is managed using React hooks (`useState`, `useCallback`), and the conversation is rendered dynamically as a series of message bubbles.
+
+---
+
+## 🛠️ Tech Stack
+
+*   **AI Models**:
+    *   **Google Gemini 2.5 Flash**: For combined audio transcription, language detection, and translation.
+    *   **Google Gemini 2.5 Flash TTS**: For text-to-speech synthesis.
+*   **Frontend Framework**: [React](https://reactjs.org/)
+*   **Styling**: [Tailwind CSS](https://tailwindcss.com/)
+*   **Language**: [TypeScript](https://www.typescriptlang.org/)
+*   **Core Web APIs**:
+    *   `navigator.mediaDevices.getUserMedia`
+    *   `MediaRecorder` API
+    *   Web Audio API (`AudioContext`)
+
+---
+
+## 📂 Project Structure
+
+```
+.
+├── components/
+│   ├── BottomControls.tsx       # UI for the language selectors and mic button
+│   └── ConversationBubble.tsx   # UI for a single message in the chat
+├── hooks/
+│   └── useAudioRecorder.ts      # Custom hook for managing audio recording and VAD
+├── services/
+│   └── geminiService.ts         # Logic for all API calls to Gemini (ASR, Translate, TTS)
+├── utils/
+│   └── audioUtils.ts            # Helper functions for decoding and playing PCM audio
+├── App.tsx                      # Main application component, state management
+├── index.html                   # HTML entry point
+├── index.tsx                    # React root renderer
+├── metadata.json                # App metadata and permissions
+└── types.ts                     # TypeScript type definitions
+```
+
+---
+
+## ⚙️ Getting Started
+
+This project is designed to run in a web environment where the Gemini API key is securely managed.
+
+To run locally, you would typically follow these steps:
+
+1.  **Clone the repository:**
+    ```bash
+    git clone <repository-url>
+    ```
+
+2.  **Install dependencies:**
+    ```bash
+    npm install
+    ```
+
+3.  **Set up API Key:**
+    You need a Google Gemini API key. Create a `.env.local` file in the project root and add your key:
+    ```
+    VITE_API_KEY=YOUR_GEMINI_API_KEY
+    ```
+    *Note: The current code uses `process.env.API_KEY`. You may need to adjust the code or your build setup (like Vite) to expose the environment variable correctly.*
+
+4.  **Run the development server:**
+    ```bash
+    npm run dev
+    ```
+    Open your browser to the URL provided by your development server.
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License. See the `LICENSE` file for details.
