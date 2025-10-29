@@ -1,4 +1,5 @@
 
+
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { GoogleGenAI } from "@google/genai";
 import { useAudioRecorder } from './hooks/useAudioRecorder';
@@ -13,11 +14,6 @@ const BackIcon = ({ className = "w-6 h-6" }) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className={className}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 9V5.25A2.25 2.25 0 0 1 10.5 3h6a2.25 2.25 0 0 1 2.25 2.25v13.5A2.25 2.25 0 0 1 16.5 21h-6a2.25 2.25 0 0 1-2.25-2.25V15m-3 0-3-3m0 0 3-3m-3 3H15" />
   </svg>
-);
-const LeftRightArrowsIcon = ({ className = "w-5 h-5" }) => (
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className={className}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
-    </svg>
 );
 const HistoryIcon = () => <svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="currentColor"><path d="M0 0h24v24H0z" fill="none"/><path d="M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg>;
 const CloseIcon = ({ className = "w-6 h-6" }) => (
@@ -51,6 +47,33 @@ const listeningPrompts: Record<string, string> = {
     [Language.Telugu]: "అనువదించు...",
     [Language.Marathi]: "भाषांतर...",
 }
+
+const instructionalPrompts: Record<string, string> = {
+    [Language.German]: "Sprachen auswählen & zum Übersetzen sprechen",
+    [Language.English]: "Select languages & speak to translate",
+    [Language.Spanish]: "Selecciona idiomas y habla para traducir",
+    [Language.French]: "Sélectionnez les langues & parlez",
+    [Language.Polish]: "Wybierz języki i mów, aby tłumaczyć",
+    [Language.Turkish]: "Dilleri seçin ve çevirmek için konuşun",
+    [Language.Romanian]: "Selectați limbile și vorbiți pentru a traduce",
+    [Language.Arabic]: "اختر اللغات وتحدث للترجمة",
+    [Language.Hindi]: "भाषाएँ चुनें और अनुवाद करने के लिए बोलें",
+    [Language.Indonesian]: "Pilih bahasa & bicaralah untuk menerjemahkan",
+    [Language.Italian]: "Seleziona le lingue e parla per tradurre",
+    [Language.Japanese]: "言語を選択して話すと翻訳します",
+    [Language.Korean]: "언어를 선택하고 번역하려면 말하세요",
+    [Language.Portuguese]: "Selecione os idiomas e fale para traduzir",
+    [Language.Russian]: "Выберите языки и говорите для перевода",
+    [Language.Dutch]: "Selecteer talen & spreek om te vertalen",
+    [Language.Thai]: "เลือกภาษาและพูดเพื่อแปล",
+    [Language.Vietnamese]: "Chọn ngôn ngữ và nói để dịch",
+    [Language.Ukrainian]: "Виберіть мови та говоріть для перекладу",
+    [Language.Bengali]: "ভাষা নির্বাচন করুন এবং অনুবাদ করতে কথা বলুন",
+    [Language.Tamil]: "மொழிகளைத் தேர்ந்தெடுத்து மொழிபெயர்க்கப் பேசுங்கள்",
+    [Language.Telugu]: "భాషలను ఎంచుకుని, అనువదించడానికి మాట్లాడండి",
+    [Language.Marathi]: "भाषा निवडा आणि भाषांतर करण्यासाठी बोला",
+};
+
 
 const germanLanguageMap: Record<string, string> = {
     [Language.English]: "Englisch",
@@ -93,6 +116,58 @@ const cleanText = (text: string | undefined): string => {
         .trim();
 };
 
+const AnimatedInstructionalHeader: React.FC<{ langA: Language, langB: Language }> = ({ langA, langB }) => {
+    const [visibleLang, setVisibleLang] = useState<'A' | 'B'>('A');
+
+    useEffect(() => {
+        setVisibleLang('A');
+        const intervalId = setInterval(() => {
+            setVisibleLang(prev => (prev === 'A' ? 'B' : 'A'));
+        }, 4000); // Cycle every 4 seconds
+
+        return () => clearInterval(intervalId);
+    }, [langA, langB]);
+
+    const textA = instructionalPrompts[langA] || "Select languages & speak to translate";
+    const textB = instructionalPrompts[langB] || instructionalPrompts[Language.English];
+
+    return (
+        <div className="relative h-6 w-64 text-center"> {/* Container for positioning */}
+            <div 
+                className="absolute inset-0 flex items-center justify-center transition-opacity duration-700 ease-in-out" 
+                style={{ opacity: visibleLang === 'A' ? 1 : 0 }}
+                aria-hidden={visibleLang !== 'A'}
+            >
+                <span>{textA}</span>
+            </div>
+            <div 
+                className="absolute inset-0 flex items-center justify-center transition-opacity duration-700 ease-in-out" 
+                style={{ opacity: visibleLang === 'B' ? 1 : 0 }}
+                aria-hidden={visibleLang !== 'B'}
+            >
+                <span>{textB}</span>
+            </div>
+        </div>
+    );
+};
+
+const AppHeader: React.FC<{
+  appState: AppState;
+  languages: LanguagePair;
+}> = ({ appState, languages }) => {
+    const lang = languages.langA; // Use primary for non-idle states
+
+    switch (appState) {
+        case AppState.LISTENING:
+            return <div className="relative h-6 flex items-center justify-center"><span>{lang === Language.German ? "Höre zu..." : "Listening..."}</span></div>;
+        case AppState.PROCESSING:
+            return <div className="relative h-6 flex items-center justify-center"><span>{lang === Language.German ? "Wird übersetzt..." : "Translating..."}</span></div>;
+        case AppState.IDLE:
+        default:
+            return <AnimatedInstructionalHeader langA={languages.langA} langB={languages.langB} />;
+    }
+};
+
 
 const App: React.FC = () => {
   const [appState, setAppState] = useState<AppState>(AppState.IDLE);
@@ -104,13 +179,8 @@ const App: React.FC = () => {
   const [langToChange, setLangToChange] = useState<'langA' | 'langB' | null>(null);
   const [streamingMessageId, setStreamingMessageId] = useState<number | null>(null);
   const aiRef = useRef<GoogleGenAI | null>(null);
-  const languagesRef = useRef(languages);
   const prevLangB = useRef(languages.langB);
-
-  useEffect(() => {
-    languagesRef.current = languages;
-  }, [languages]);
-
+  
   useEffect(() => {
     if (prevLangB.current !== languages.langB) {
       setConversation(prev => {
@@ -145,13 +215,12 @@ const App: React.FC = () => {
     }
 
     try {
-      const currentLanguages = languagesRef.current;
-      const result = await transcribeAndTranslate(aiRef.current, audioBlob, currentLanguages.langA, currentLanguages.langB);
+      const result = await transcribeAndTranslate(aiRef.current, audioBlob, languages.langA, languages.langB);
       
       const transcription = cleanText(result.transcription);
       const translation = cleanText(result.translation);
       
-      const sourceLanguage = result.sourceLanguage || currentLanguages.langA;
+      const sourceLanguage = result.sourceLanguage || languages.langA;
       
       if (!transcription && !translation) {
           throw new Error("Received empty transcription and translation.");
@@ -160,9 +229,9 @@ const App: React.FC = () => {
       const newBubble: ConversationBubbleMessage = {
         id: Date.now(),
         type: 'CONVERSATION',
-        direction: sourceLanguage === currentLanguages.langB ? MessageDirection.LEFT : MessageDirection.RIGHT,
+        direction: sourceLanguage === languages.langB ? MessageDirection.LEFT : MessageDirection.RIGHT,
         sourceLang: sourceLanguage,
-        targetLang: sourceLanguage === currentLanguages.langA ? currentLanguages.langB : currentLanguages.langA,
+        targetLang: sourceLanguage === languages.langA ? languages.langB : languages.langA,
         transcription: transcription,
         translation: translation,
         audioDuration: duration,
@@ -192,7 +261,7 @@ const App: React.FC = () => {
     } finally {
       setAppState(AppState.IDLE);
     }
-  }, [autoPlayback]);
+  }, [autoPlayback, languages]);
 
   const { isRecording, amplitude, startRecording, stopRecording } = useAudioRecorder(handleFinishedRecording);
   
@@ -243,7 +312,7 @@ const App: React.FC = () => {
   };
 
   const handleQuickSelect = (lang: Language) => {
-      const keyToChange = languages.langA === languagesRef.current.langA ? 'langB' : 'langA';
+      const keyToChange = 'langB';
       handleLanguageChange(lang, keyToChange);
   };
 
@@ -285,10 +354,11 @@ const App: React.FC = () => {
            <button onClick={handleClearConversation} className={`p-2 rounded-full hover:bg-gray-200 transition-colors ${conversation.length > 0 ? 'visible' : 'invisible'}`}>
             <BackIcon />
            </button>
-           <h1 className="text-base font-medium tracking-wide text-center flex items-center gap-2">
-             <span>{getLocalizedDisplayName(languages.langA)}</span>
-             <LeftRightArrowsIcon />
-             <span>{getLocalizedDisplayName(languages.langB)}</span>
+           <h1 className="text-sm font-medium tracking-wide text-center">
+             <AppHeader 
+                appState={appState}
+                languages={languages}
+             />
            </h1>
           <div className="flex items-center w-10">
               {/* Placeholder for alignment */}

@@ -1,5 +1,6 @@
 
-import { useState, useRef, useCallback } from 'react';
+
+import { useState, useRef, useCallback, useEffect } from 'react';
 
 const VAD_SILENCE_TIMEOUT_MS = 2200;
 const AMPLITUDE_UPDATE_INTERVAL_MS = 50;
@@ -16,6 +17,24 @@ export const useAudioRecorder = (onRecordingFinished: (blob: Blob, duration: num
     const amplitudeIntervalRef = useRef<number | null>(null);
     const streamRef = useRef<MediaStream | null>(null);
     const recordingStartTimeRef = useRef<number>(0);
+
+    // Use a ref to hold the latest version of the callback to prevent stale closures.
+    const onRecordingFinishedRef = useRef(onRecordingFinished);
+    useEffect(() => {
+        onRecordingFinishedRef.current = onRecordingFinished;
+    }, [onRecordingFinished]);
+
+    const stopRecording = useCallback(() => {
+        if (!mediaRecorderRef.current || mediaRecorderRef.current.state !== 'recording') return;
+        
+        mediaRecorderRef.current.stop();
+        if (amplitudeIntervalRef.current) clearInterval(amplitudeIntervalRef.current);
+        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+        
+        amplitudeIntervalRef.current = null;
+        silenceTimerRef.current = null;
+        setAmplitude(0);
+    }, []);
 
     const updateAmplitude = useCallback(() => {
         if (analyserRef.current) {
@@ -41,19 +60,7 @@ export const useAudioRecorder = (onRecordingFinished: (blob: Blob, duration: num
                 }
             }
         }
-    }, []);
-
-    const stopRecording = useCallback(() => {
-        if (!mediaRecorderRef.current || mediaRecorderRef.current.state !== 'recording') return;
-        
-        mediaRecorderRef.current.stop();
-        if (amplitudeIntervalRef.current) clearInterval(amplitudeIntervalRef.current);
-        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-        
-        amplitudeIntervalRef.current = null;
-        silenceTimerRef.current = null;
-        setAmplitude(0);
-    }, []);
+    }, [stopRecording]);
 
     const startRecording = useCallback(async () => {
         try {
@@ -77,7 +84,7 @@ export const useAudioRecorder = (onRecordingFinished: (blob: Blob, duration: num
             mediaRecorderRef.current.onstop = () => {
                 const duration = Date.now() - recordingStartTimeRef.current;
                 const audioBlob = new Blob(audioChunksRef.current, { type: options.mimeType });
-                onRecordingFinished(audioBlob, duration);
+                onRecordingFinishedRef.current(audioBlob, duration);
                 setIsRecording(false);
                 stream.getTracks().forEach(track => track.stop());
                 audioContextRef.current?.close();
@@ -94,7 +101,7 @@ export const useAudioRecorder = (onRecordingFinished: (blob: Blob, duration: num
             console.error("Error accessing microphone:", err);
             setIsRecording(false);
         }
-    }, [onRecordingFinished, updateAmplitude]);
+    }, [updateAmplitude]);
 
 
     return { isRecording, amplitude, startRecording, stopRecording };

@@ -1,4 +1,5 @@
 
+
 import { GoogleGenAI, Modality, Type } from "@google/genai";
 import { GeminiAsrResponse } from '../types';
 
@@ -32,7 +33,7 @@ export async function transcribeAndTranslate(
     contents: [
       {
         parts: [
-          { text: "Process the attached audio according to your strict rules." },
+          { text: "Transcribe and translate the attached audio." },
           {
             inlineData: {
               mimeType: audioBlob.type,
@@ -43,17 +44,16 @@ export async function transcribeAndTranslate(
       }
     ],
     config: {
-      systemInstruction: `You are a highly skilled AI translation service. Your task is to process user audio and return a specific JSON object.
-
-YOU MUST FOLLOW THESE RULES:
-1. The user will speak in one of two languages: '${langA}' or '${langB}'. Your first job is to correctly identify which language was spoken.
-2. After identifying the spoken language, you must provide a perfect, verbatim transcription.
-3. You must then translate the transcription into the OTHER language.
-   - If '${langA}' is spoken, translate to '${langB}'.
-   - If '${langB}' is spoken, translate to '${langA}'.
-4. Your ONLY output MUST be a single, valid JSON object that strictly follows the provided schema. Do not output any other text, markdown, or explanations.
-5. CRITICAL RULE: NEVER use placeholders. The words 'undefined', 'unintelligible', or '...' are strictly forbidden in your JSON output. If any part of the audio is unclear, transcribe and translate only the clear parts. If the entire audio is unusable, return empty strings for the 'transcription' and 'translation' fields. A partial, accurate response is required. An inaccurate or placeholder-filled response is a failure.
-6. The 'sourceLanguage' field in your JSON response must contain the full name of the language you identified, exactly as it appears in this prompt (e.g., '${langA}').`,
+      systemInstruction: `You are an expert audio transcription and translation AI. Your task is to process user-provided audio.
+- The audio will be in one of two languages: '${langA}' or '${langB}'.
+- Step 1: Identify which language was spoken.
+- Step 2: Transcribe the audio into text of the identified language.
+- Step 3: Translate the transcription into the other language.
+  - If the spoken language is '${langA}', you MUST translate the transcription to '${langB}'.
+  - If the spoken language is '${langB}', you MUST translate the transcription to '${langA}'.
+- Your final output MUST be a single, valid JSON object containing three keys: "sourceLanguage", "transcription", and "translation".
+- For the "sourceLanguage" key, use the exact string for the identified language, which will be either '${langA}' or '${langB}'.
+- If the audio is unintelligible, return empty strings for "transcription" and "translation". Do not invent text or use placeholders like 'undefined'.`,
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
