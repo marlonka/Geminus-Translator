@@ -1,12 +1,13 @@
 
 
+
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { GoogleGenAI } from "@google/genai";
 import { useAudioRecorder } from './hooks/useAudioRecorder';
 import { ConversationBubble } from './components/ConversationBubble';
 import { BottomControls } from './components/BottomControls';
-import { Language, AppState, ConversationMessage, LanguagePair, MessageDirection, SystemMessage, ConversationBubbleMessage } from './types';
-import { transcribeAndTranslate, generateSpeech } from './services/geminiService';
+import { Language, AppState, ConversationMessage, LanguagePair, MessageDirection, SystemMessage, ConversationBubbleMessage, GeminiAsrResponse } from './types';
+import { transcribeAndTranslateStream, generateSpeech } from './services/geminiService';
 import { playPcmAudio } from './utils/audioUtils';
 
 // --- SVG Icons ---
@@ -109,11 +110,19 @@ const getLocalizedDisplayName = (lang: Language): string => {
 
 const cleanText = (text: string | undefined): string => {
     if (!text) return "";
-    // Aggressively remove the word "undefined", case-insensitively, and clean up surrounding whitespace.
-    return text
-        .replace(/undefined/gi, '')
+
+    let cleanedText = text
+        .replace(/\bundefined\b/gi, '') // More precise "undefined" removal
         .replace(/\s+/g, ' ')
         .trim();
+
+    // Loop to remove all consecutive duplicates, e.g., "go go go" becomes "go".
+    const duplicateWordRegex = /\b(\w+)\s+\1\b/gi;
+    while (duplicateWordRegex.test(cleanedText)) {
+        cleanedText = cleanedText.replace(duplicateWordRegex, '$1');
+    }
+    
+    return cleanedText;
 };
 
 const AnimatedInstructionalHeader: React.FC<{ langA: Language, langB: Language }> = ({ langA, langB }) => {
@@ -190,6 +199,7 @@ const App: React.FC = () => {
             type: 'SYSTEM',
             text: `Translation language switched to ${getLocalizedDisplayName(languages.langB)}`,
           };
+          console.log(`[SYSTEM] Language switched to: ${languages.langB}`);
           return [...prev, newMessage];
         }
         return prev;
@@ -198,81 +208,134 @@ const App: React.FC = () => {
     prevLangB.current = languages.langB;
   }, [languages.langB]);
 
+  useEffect(() => {
+     console.log(`[STATE] App state changed to: %c${appState}`, 'font-weight: bold;');
+  }, [appState]);
+
   
   useEffect(() => {
     if (process.env.API_KEY) {
         aiRef.current = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        console.info("[INIT] GoogleGenAI initialized successfully.");
+    } else {
+        console.error("[INIT] API_KEY environment variable not set.");
     }
   }, []);
   
-  const handleFinishedRecording = useCallback(async (audioBlob: Blob, duration: number) => {
+ const handleFinishedRecording = useCallback(async (audioBlob: Blob, duration: number) => {
     setAppState(AppState.PROCESSING);
     setError(null);
     if (!aiRef.current) {
-        setError("Gemini AI not initialized. Please set API_KEY.");
+        const errorMsg = "Gemini AI not initialized. Please set API_KEY.";
+        setError(errorMsg);
+        console.error(`[PROCESS] ${errorMsg}`);
         setAppState(AppState.IDLE);
         return;
     }
 
-    try {
-      const result = await transcribeAndTranslate(aiRef.current, audioBlob, languages.langA, languages.langB);
-      
-      const transcription = cleanText(result.transcription);
-      const translation = cleanText(result.translation);
-      
-      const sourceLanguage = result.sourceLanguage || languages.langA;
-      
-      if (!transcription && !translation) {
-          throw new Error("Received empty transcription and translation.");
-      }
-
-      const newBubble: ConversationBubbleMessage = {
-        id: Date.now(),
+    const messageId = Date.now();
+    
+    // Create an initial empty bubble for immediate feedback.
+    const initialBubble: ConversationBubbleMessage = {
+        id: messageId,
         type: 'CONVERSATION',
-        direction: sourceLanguage === languages.langB ? MessageDirection.LEFT : MessageDirection.RIGHT,
-        sourceLang: sourceLanguage,
-        targetLang: sourceLanguage === languages.langA ? languages.langB : languages.langA,
-        transcription: transcription,
-        translation: translation,
+        direction: MessageDirection.RIGHT, // Default, will be updated by stream
+        sourceLang: '...',
+        targetLang: languages.langB,
+        transcription: '...',
+        translation: '',
         audioDuration: duration,
-      };
+    };
 
-      setConversation(prev => [...prev, newBubble]);
-      setStreamingMessageId(newBubble.id);
-      setTimeout(() => setStreamingMessageId(null), duration);
-      
-      if (autoPlayback && translation) {
-        generateSpeech(aiRef.current, translation, newBubble.targetLang)
-          .then(audioData => {
-            setConversation(prev => prev.map(msg => 
-              msg.id === newBubble.id && msg.type === 'CONVERSATION' ? { ...msg, base64Audio: audioData } : msg
-            ));
-            playPcmAudio(audioData);
-          })
-          .catch(e => {
-            console.error("Failed to generate or play speech.", e);
-            setError("Die Übersetzung konnte nicht wiedergegeben werden.");
-          });
-      }
+    setConversation(prev => [...prev, initialBubble]);
+    setStreamingMessageId(messageId);
+
+    try {
+        let finalResult: Partial<GeminiAsrResponse> = {};
+
+        await transcribeAndTranslateStream(
+            aiRef.current, 
+            audioBlob, 
+            languages.langA, 
+            languages.langB,
+            (chunk) => {
+                console.log("[STREAM] Received chunk:", chunk);
+                finalResult = { ...finalResult, ...chunk };
+
+                const sourceLanguage = finalResult.sourceLanguage || languages.langA;
+                const direction = sourceLanguage === languages.langB ? MessageDirection.LEFT : MessageDirection.RIGHT;
+                const targetLang = sourceLanguage === languages.langA ? languages.langB : languages.langA;
+                
+                setConversation(prev => prev.map(msg => 
+                    msg.id === messageId && msg.type === 'CONVERSATION' 
+                    ? { 
+                        ...msg, 
+                        direction,
+                        sourceLang: sourceLanguage,
+                        targetLang,
+                        transcription: finalResult.transcription || '',
+                        translation: finalResult.translation || ''
+                        } 
+                    : msg
+                ));
+            }
+        );
+        
+        console.log("[PROCESS] Streaming finished. Final result:", finalResult);
+        setStreamingMessageId(null);
+        
+        // Clean up the final text just in case the model includes duplicates despite the prompt.
+        const cleanedTranscription = cleanText(finalResult.transcription);
+        const cleanedTranslation = cleanText(finalResult.translation);
+
+        setConversation(prev => prev.map(msg =>
+            msg.id === messageId && msg.type === 'CONVERSATION'
+                ? { ...msg, transcription: cleanedTranscription, translation: cleanedTranslation }
+                : msg
+        ));
+
+        if (autoPlayback && cleanedTranslation) {
+            const finalSourceLang = finalResult.sourceLanguage || languages.langA;
+            const finalTargetLang = finalSourceLang === languages.langA ? languages.langB : languages.langA;
+
+            console.info("[PROCESS] Auto-playback enabled. Generating speech...");
+            generateSpeech(aiRef.current, cleanedTranslation, finalTargetLang)
+            .then(audioData => {
+                console.log("[PROCESS] Speech generated. Updating message with audio data.");
+                setConversation(prev => prev.map(msg => 
+                msg.id === messageId && msg.type === 'CONVERSATION' ? { ...msg, base64Audio: audioData } : msg
+                ));
+                playPcmAudio(audioData);
+            })
+            .catch(e => {
+                console.error("[PROCESS] Failed to generate or play speech.", e);
+                setError("Die Übersetzung konnte nicht wiedergegeben werden.");
+            });
+        }
 
     } catch (e) {
-      console.error(e);
-      setError("Entschuldigung, das habe ich nicht verstanden. Bitte erneut versuchen.");
+        console.error("[PROCESS] Error during stream processing:", e);
+        setError("Entschuldigung, das habe ich nicht verstanden. Bitte erneut versuchen.");
+        setConversation(prev => prev.filter(msg => msg.id !== messageId));
+        setStreamingMessageId(null);
     } finally {
-      setAppState(AppState.IDLE);
+        setAppState(AppState.IDLE);
     }
-  }, [autoPlayback, languages]);
+}, [autoPlayback, languages]);
+
 
   const { isRecording, amplitude, startRecording, stopRecording } = useAudioRecorder(handleFinishedRecording);
   
   const handleMicToggle = () => {
     if (appState === AppState.LISTENING) {
+      console.log("[CONTROL] Mic toggled: Stopping recording.");
       stopRecording();
     } else if (appState === AppState.IDLE) {
       if (!process.env.API_KEY) {
         setError("API_KEY environment variable not set.");
         return;
       }
+      console.log("[CONTROL] Mic toggled: Starting recording.");
       setError(null);
       startRecording();
       setAppState(AppState.LISTENING);
@@ -317,6 +380,7 @@ const App: React.FC = () => {
   };
 
   const handleClearConversation = () => {
+    console.warn("[CONTROL] Clearing conversation history.");
     setConversation([]);
     stopRecording();
     setAppState(AppState.IDLE);
@@ -324,11 +388,16 @@ const App: React.FC = () => {
 
   const handleReplayAudio = async (message: ConversationBubbleMessage) => {
     if (!aiRef.current) return;
+    console.groupCollapsed(`[CONTROL] Replaying audio for message ID: ${message.id}`);
+    
     if (message.base64Audio) {
+      console.log("Playing existing audio data.");
       await playPcmAudio(message.base64Audio);
     } else {
       try {
+        console.log("No existing audio. Generating new speech...");
         const audioData = await generateSpeech(aiRef.current, message.translation, message.targetLang);
+        console.log("Speech generated. Updating message and playing audio.");
         setConversation(conv => conv.map(m => m.id === message.id && m.type === 'CONVERSATION' ? {...m, base64Audio: audioData} : m));
         await playPcmAudio(audioData);
       } catch (e) {
@@ -336,6 +405,7 @@ const App: React.FC = () => {
         setError("Audio konnte nicht abgespielt werden.");
       }
     }
+    console.groupEnd();
   };
 
   const QuickSelectButton: React.FC<{ lang: Language, onClick: (lang: Language) => void }> = ({ lang, onClick }) => (

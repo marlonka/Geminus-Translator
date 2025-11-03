@@ -27,6 +27,7 @@ export const useAudioRecorder = (onRecordingFinished: (blob: Blob, duration: num
     const stopRecording = useCallback(() => {
         if (!mediaRecorderRef.current || mediaRecorderRef.current.state !== 'recording') return;
         
+        console.log("[RECORDER] Stopping recording via stopRecording().");
         mediaRecorderRef.current.stop();
         if (amplitudeIntervalRef.current) clearInterval(amplitudeIntervalRef.current);
         if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
@@ -51,7 +52,10 @@ export const useAudioRecorder = (onRecordingFinished: (blob: Blob, duration: num
             // VAD check
             if (rms < 0.01) { // Threshold for silence
                 if (!silenceTimerRef.current) {
-                    silenceTimerRef.current = window.setTimeout(stopRecording, VAD_SILENCE_TIMEOUT_MS);
+                    silenceTimerRef.current = window.setTimeout(() => {
+                        console.warn("[RECORDER] Silence detected (VAD). Stopping recording.");
+                        stopRecording();
+                    }, VAD_SILENCE_TIMEOUT_MS);
                 }
             } else {
                 if (silenceTimerRef.current) {
@@ -63,6 +67,7 @@ export const useAudioRecorder = (onRecordingFinished: (blob: Blob, duration: num
     }, [stopRecording]);
 
     const startRecording = useCallback(async () => {
+        console.log("[RECORDER] Attempting to start recording...");
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             streamRef.current = stream;
@@ -84,6 +89,12 @@ export const useAudioRecorder = (onRecordingFinished: (blob: Blob, duration: num
             mediaRecorderRef.current.onstop = () => {
                 const duration = Date.now() - recordingStartTimeRef.current;
                 const audioBlob = new Blob(audioChunksRef.current, { type: options.mimeType });
+                
+                console.groupCollapsed("[RECORDER] Recording finished in 'onstop' event.");
+                console.log("Blob:", audioBlob);
+                console.log(`Duration: ${duration}ms`);
+                console.groupEnd();
+
                 onRecordingFinishedRef.current(audioBlob, duration);
                 setIsRecording(false);
                 stream.getTracks().forEach(track => track.stop());
@@ -93,12 +104,13 @@ export const useAudioRecorder = (onRecordingFinished: (blob: Blob, duration: num
             mediaRecorderRef.current.start();
             recordingStartTimeRef.current = Date.now();
             setIsRecording(true);
+            console.info("[RECORDER] Recording started successfully.");
 
             if (amplitudeIntervalRef.current) clearInterval(amplitudeIntervalRef.current);
             amplitudeIntervalRef.current = window.setInterval(updateAmplitude, AMPLITUDE_UPDATE_INTERVAL_MS);
 
         } catch (err) {
-            console.error("Error accessing microphone:", err);
+            console.error("[RECORDER] Error accessing microphone:", err);
             setIsRecording(false);
         }
     }, [updateAmplitude]);

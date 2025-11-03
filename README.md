@@ -3,7 +3,7 @@
 
 Geminus Translator is a real-time, voice-driven bilingual conversation app powered by the Google Gemini API. It allows two people speaking different languages to communicate seamlessly. Simply select your languages, press start, and speak into your microphone. The app provides instant transcription and audio translation, displaying the conversation in a clean, chat-like interface.
 
-![Geminus Translator Screenshot](https://raw.githubusercontent.com/marlonka/Geminus-Translator/refs/heads/main/geminustranslator.jpg)
+![Geminus Translator Screenshot](https://storage.googleapis.com/aistudio-o-prd-0-asia-northeast1-b-public/gallery/previews/Geminus-Translator.png)
 
 ---
 

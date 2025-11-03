@@ -1,50 +1,6 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState } from 'react';
 import { ConversationBubbleMessage, MessageDirection } from '../types';
-
-interface StreamingTextProps {
-    fullText: string;
-    duration: number;
-    className: string;
-}
-
-const StreamingText: React.FC<StreamingTextProps> = ({ fullText, duration, className }) => {
-    const [displayedText, setDisplayedText] = useState('');
-
-    // Definitive safeguard: Filter out "undefined" and empty strings before rendering.
-    const words = React.useMemo(() =>
-        fullText
-            .split(' ')
-            .filter(word => word.toLowerCase() !== 'undefined' && word.trim() !== ''),
-        [fullText]
-    );
-
-    useEffect(() => {
-        setDisplayedText(''); 
-        if (words.length === 0) return;
-
-        if (words.length <= 1 || duration <= 50) {
-            setDisplayedText(words.join(' '));
-            return;
-        }
-        
-        const effectiveDuration = Math.max(duration, 500);
-        const delayPerWord = (effectiveDuration / words.length);
-        let currentIndex = 0;
-        
-        const intervalId = setInterval(() => {
-            if (currentIndex < words.length) {
-                 setDisplayedText(prev => prev ? `${prev} ${words[currentIndex]}` : words[currentIndex]);
-                currentIndex++;
-            } else {
-                clearInterval(intervalId);
-            }
-        }, delayPerWord);
-
-        return () => clearInterval(intervalId);
-    }, [fullText, duration, words]); // fullText is included to re-trigger on prop change
-
-    return <p className={className}>{displayedText}</p>;
-};
 
 const SpeakerIcon = ({ className = "w-5 h-5" }) => (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className={className}>
@@ -111,16 +67,12 @@ export const ConversationBubble: React.FC<{ message: ConversationBubbleMessage; 
                     </div>
                 </div>
                 
-                <StreamingText 
-                    fullText={message.transcription}
-                    duration={message.audioDuration}
-                    className={`text-base ${transcriptionColor}`}
-                />
-                <StreamingText 
-                    fullText={message.translation}
-                    duration={message.audioDuration}
-                    className={`text-base mt-1 font-medium ${translationColor}`}
-                />
+                <p className={`text-base min-h-[1.5rem] ${transcriptionColor}`}>
+                    {message.transcription}
+                </p>
+                <p className={`text-base mt-1 font-medium min-h-[1.5rem] ${translationColor}`}>
+                    {message.translation}
+                </p>
             </div>
         </div>
     );
