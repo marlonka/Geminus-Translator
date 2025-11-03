@@ -1,6 +1,7 @@
 
 
 
+
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { GoogleGenAI } from "@google/genai";
 import { useAudioRecorder } from './hooks/useAudioRecorder';
@@ -235,14 +236,14 @@ const App: React.FC = () => {
 
     const messageId = Date.now();
     
-    // Create an initial empty bubble for immediate feedback.
+    // Create an initial processing bubble (centered) for immediate feedback.
     const initialBubble: ConversationBubbleMessage = {
         id: messageId,
         type: 'CONVERSATION',
-        direction: MessageDirection.RIGHT, // Default, will be updated by stream
-        sourceLang: '...',
-        targetLang: languages.langB,
-        transcription: '...',
+        direction: MessageDirection.RIGHT, // Will be updated by stream
+        sourceLang: '',
+        targetLang: '',
+        transcription: '',
         translation: '',
         audioDuration: duration,
     };
@@ -387,7 +388,7 @@ const App: React.FC = () => {
   };
 
   const handleReplayAudio = async (message: ConversationBubbleMessage) => {
-    if (!aiRef.current) return;
+    if (!aiRef.current || !message.targetLang) return;
     console.groupCollapsed(`[CONTROL] Replaying audio for message ID: ${message.id}`);
     
     if (message.base64Audio) {
@@ -455,7 +456,7 @@ const App: React.FC = () => {
             if (msg.type === 'SYSTEM') {
               return <SystemMessageBubble key={msg.id} message={msg} />;
             }
-            return <ConversationBubble key={msg.id} message={msg} onReplay={handleReplayAudio} isStreaming={streamingMessageId === msg.id} />;
+            return <ConversationBubble key={msg.id} message={msg} onReplay={handleReplayAudio} isStreaming={streamingMessageId === msg.id} languages={languages} />;
           })}
           <div className="h-4" />
           {error && <div className="fixed bottom-28 left-1/2 -translate-x-1/2 text-center text-white p-3 bg-[#c3002d] rounded-xl shadow-lg animate-fade-in-up">{error}</div>}

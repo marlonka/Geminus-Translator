@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Modality } from "@google/genai";
 import { GeminiAsrResponse } from '../types';
 
@@ -61,7 +62,10 @@ export async function transcribeAndTranslateStream(
 - The audio will be in one of two languages: '${langA}' or '${langB}'.
 - First, identify the spoken language. Output it immediately within [LANG] and [/LANG] tags. Example: [LANG]${langA}[/LANG]
 - Second, transcribe the audio into text of the identified language. Stream the transcription as it's generated within [TRANSCRIPTION] and [/TRANSCRIPTION] tags.
-- Third, translate the transcription into the other language. Stream the translation as it's generated within [TRANSLATION] and [/TRANSLATION] tags.
+- Third, translate the transcription based on the identified language:
+  * IF the identified language is '${langA}', translate the transcription into '${langB}'
+  * IF the identified language is '${langB}', translate the transcription into '${langA}'
+- Stream the translation within [TRANSLATION] and [/TRANSLATION] tags.
 - The closing tags MUST include a forward slash, like [/TAG]. For example, [/TRANSCRIPTION].
 
 CRITICAL RULES:
@@ -69,6 +73,7 @@ CRITICAL RULES:
 - Output the [LANG] tag block first and only once. It must be closed with [/LANG].
 - Then, stream the content for [TRANSCRIPTION] and [TRANSLATION] tags as the text becomes available.
 - Ensure all tags are properly closed with a forward slash (e.g., [/TRANSCRIPTION]).
+- The translation MUST be in the correct target language based on the rules above.
 - NEVER repeat words. The transcription and translation must be natural.
 - NEVER use the word "undefined". If audio is unclear, output empty tags like [TRANSCRIPTION][/TRANSCRIPTION].`;
 
