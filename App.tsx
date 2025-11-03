@@ -259,6 +259,7 @@ const App: React.FC = () => {
   const [streamingMessageId, setStreamingMessageId] = useState<number | null>(null);
   const aiRef = useRef<GoogleGenAI | null>(null);
   const prevLangB = useRef(languages.langB);
+  const scrollContainerRef = useRef<HTMLElement>(null);
   
   useEffect(() => {
     if (prevLangB.current !== languages.langB) {
@@ -281,6 +282,24 @@ const App: React.FC = () => {
   useEffect(() => {
      console.log(`[STATE] App state changed to: %c${appState}`, 'font-weight: bold;');
   }, [appState]);
+
+  useEffect(() => {
+    // Smoothly scroll to the bottom when a new message is added,
+    // or when a streaming message is finalized.
+    const scrollNode = scrollContainerRef.current;
+    if (scrollNode) {
+      // Use a short timeout to allow the DOM to update its layout,
+      // ensuring we scroll to the very bottom after content changes.
+      const timer = setTimeout(() => {
+        scrollNode.scrollTo({
+          top: scrollNode.scrollHeight,
+          behavior: 'smooth',
+        });
+      }, 100);
+      
+      return () => clearTimeout(timer); // Cleanup the timer
+    }
+  }, [conversation.length, streamingMessageId]);
 
   
   useEffect(() => {
@@ -516,7 +535,7 @@ const App: React.FC = () => {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-4 space-y-4 hide-scrollbar">
+        <main ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 hide-scrollbar">
           {conversation.length === 0 && appState === AppState.IDLE && (
              <div className="flex flex-col items-center justify-center h-full text-center px-4">
                 <div className="animate-fade-in-up" style={{ animationDuration: '0.5s' }}>
