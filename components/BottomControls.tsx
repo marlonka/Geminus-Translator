@@ -49,9 +49,9 @@ const Waveform: React.FC<{ amplitude: number }> = ({ amplitude }) => {
     const barHeight = (amp: number, factor: number) => Math.max(6, Math.min(28, amp * 200 * factor));
     return (
         <div className="flex items-center justify-center h-full w-full space-x-1.5">
-            <div className="w-2 bg-white rounded-full transition-all duration-75" style={{ height: `${barHeight(amplitude, 1.5)}px` }}></div>
-            <div className="w-2 bg-white rounded-full transition-all duration-75" style={{ height: `${barHeight(amplitude, 2.0)}px` }}></div>
-            <div className="w-2 bg-white rounded-full transition-all duration-75" style={{ height: `${barHeight(amplitude, 1.5)}px` }}></div>
+            <div className="w-2 bg-white rounded-full transition-all duration-75 ease-out" style={{ height: `${barHeight(amplitude, 1.5)}px` }}></div>
+            <div className="w-2 bg-white rounded-full transition-all duration-75 ease-out" style={{ height: `${barHeight(amplitude, 2.0)}px` }}></div>
+            <div className="w-2 bg-white rounded-full transition-all duration-75 ease-out" style={{ height: `${barHeight(amplitude, 1.5)}px` }}></div>
         </div>
     );
 };
@@ -76,7 +76,8 @@ const FabContent: React.FC<{appState: AppState; amplitude: number;}> = ({ appSta
 const LanguagePill: React.FC<{lang: string, onClick: () => void, className?: string}> = ({ lang, onClick, className = '' }) => (
     <button 
         onClick={onClick} 
-        className={`px-4 py-3 bg-white border border-gray-300 rounded-2xl text-base font-medium text-[#464646] hover:bg-gray-50 transition-colors shadow-sm flex-1 text-center ${className}`}
+        className={`px-4 py-3 bg-white border border-gray-300 rounded-2xl text-base font-medium text-[#464646] hover:bg-gray-50 hover:scale-105 active:scale-95 transition-all duration-200 shadow-sm flex-1 text-center ${className}`}
+        aria-label={`Select language: ${lang}`}
     >
         {lang.split('(')[0]}
     </button>
@@ -85,7 +86,7 @@ const LanguagePill: React.FC<{lang: string, onClick: () => void, className?: str
 export const BottomControls: React.FC<BottomControlsProps> = ({ appState, amplitude, languages, autoPlayback, onMicToggle, onLanguageChange, onAutoPlaybackToggle }) => {
     
     const isIdle = appState === AppState.IDLE;
-    const mainButtonBaseClasses = "relative flex items-center justify-center bg-[#c3002d] text-white shadow-lg transform transition-all duration-300 ease-in-out hover:scale-105 active:scale-95";
+    const mainButtonBaseClasses = "relative flex items-center justify-center bg-[#c3002d] text-white shadow-lg transform transition-all duration-200 ease-out hover:scale-105 active:scale-95";
 
     if (isIdle) {
         return (
@@ -98,13 +99,18 @@ export const BottomControls: React.FC<BottomControlsProps> = ({ appState, amplit
                     <LanguagePill lang={languages.langB} onClick={() => onLanguageChange('langB')} />
                 </div>
                 <div className="flex items-center justify-between w-full max-w-lg mx-auto mt-4">
-                    <button onClick={onAutoPlaybackToggle} className={`flex items-center space-x-2 text-sm text-slate-500 transition-opacity ${autoPlayback ? 'opacity-100' : 'opacity-60'}`}>
+                    <button 
+                      onClick={onAutoPlaybackToggle} 
+                      className={`flex items-center space-x-2 text-sm text-slate-500 hover:scale-105 active:scale-95 transition-all duration-200 ${autoPlayback ? 'opacity-100' : 'opacity-60'}`}
+                      aria-label={autoPlayback ? 'Auto sound on' : 'Auto sound off'}
+                    >
                         {autoPlayback ? <VolumeIcon /> : <MutedIcon />}
                         <span className="text-xs w-36 text-left">{autoPlayback ? 'Auto Sound AN' : 'Auto Sound AUS'}</span>
                     </button>
                     <button
                         onClick={onMicToggle}
                         className={`${mainButtonBaseClasses} w-48 h-16 rounded-full`}
+                        aria-label="Start recording"
                     >
                         <FabContent appState={appState} amplitude={amplitude} />
                     </button>
@@ -117,7 +123,11 @@ export const BottomControls: React.FC<BottomControlsProps> = ({ appState, amplit
     return (
          <footer className="bg-white/80 backdrop-blur-sm p-4 shrink-0 border-t border-gray-200">
              <div className="flex items-center justify-between w-full max-w-lg mx-auto h-16">
-                 <button onClick={onAutoPlaybackToggle} className={`flex items-center space-x-2 text-sm text-slate-500 transition-opacity ${autoPlayback ? 'opacity-100' : 'opacity-60'}`}>
+                 <button 
+                   onClick={onAutoPlaybackToggle} 
+                   className={`flex items-center space-x-2 text-sm text-slate-500 hover:scale-105 active:scale-95 transition-all duration-200 ${autoPlayback ? 'opacity-100' : 'opacity-60'}`}
+                   aria-label={autoPlayback ? 'Auto sound on' : 'Auto sound off'}
+                 >
                     {autoPlayback ? <VolumeIcon /> : <MutedIcon />}
                     <span className="text-xs w-36 text-left">{autoPlayback ? 'Auto Sound AN' : 'Auto Sound AUS'}</span>
                  </button>
@@ -126,6 +136,7 @@ export const BottomControls: React.FC<BottomControlsProps> = ({ appState, amplit
                      onClick={onMicToggle}
                      className={`${mainButtonBaseClasses} w-[150px] h-16 rounded-full`}
                      disabled={appState === AppState.PROCESSING}
+                     aria-label="Stop recording"
                  >
                      <FabContent appState={appState} amplitude={amplitude} />
                  </button>

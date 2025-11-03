@@ -1,6 +1,3 @@
-
-
-
 import React, { useState, useEffect } from 'react';
 import { ConversationBubbleMessage, MessageDirection, LanguagePair, Language } from '../types';
 
@@ -60,10 +57,10 @@ const AnimatedProcessingText: React.FC<{ langA: Language, langB: Language }> = (
     const [visibleLang, setVisibleLang] = useState<'A' | 'B'>('A');
 
     useEffect(() => {
-        setVisibleLang('A'); // Reset on language change
+        setVisibleLang('A');
         const intervalId = setInterval(() => {
             setVisibleLang(prev => (prev === 'A' ? 'B' : 'A'));
-        }, 2000); // Cycle every 2 seconds
+        }, 2000);
 
         return () => clearInterval(intervalId);
     }, [langA, langB]);
@@ -78,14 +75,14 @@ const AnimatedProcessingText: React.FC<{ langA: Language, langB: Language }> = (
                 style={{ opacity: visibleLang === 'A' ? 1 : 0 }}
                 aria-hidden={visibleLang !== 'A'}
             >
-                <span className="text-sm">{textA}</span>
+                <span className="text-sm font-medium shimmer-text">{textA}</span>
             </div>
             <div 
                 className="absolute inset-0 flex items-center transition-opacity duration-500 ease-in-out" 
                 style={{ opacity: visibleLang === 'B' ? 1 : 0 }}
                 aria-hidden={visibleLang !== 'B'}
             >
-                <span className="text-sm">{textB}</span>
+                <span className="text-sm font-medium shimmer-text">{textB}</span>
             </div>
         </div>
     );
@@ -99,9 +96,7 @@ export const ConversationBubble: React.FC<{
 }> = ({ message, onReplay, isStreaming, languages }) => {
     const [isCopied, setIsCopied] = useState(false);
     
-    // Check if this is in the initial processing state (before language detection)
     const isProcessing = !message.sourceLang || !message.targetLang;
-    
     const isUser = message.direction === MessageDirection.RIGHT;
 
     const bubbleClasses = isUser
@@ -115,7 +110,7 @@ export const ConversationBubble: React.FC<{
     const streamingClasses = isStreaming ? 'streaming-border' : '';
 
     const handleCopy = () => {
-        if (!message.sourceLang) return; // Don't copy while processing
+        if (!message.sourceLang) return;
         const textToCopy = `${message.sourceLang}: ${message.transcription}\n${message.targetLang}: ${message.translation}`;
         navigator.clipboard.writeText(textToCopy).then(() => {
             setIsCopied(true);
@@ -125,11 +120,10 @@ export const ConversationBubble: React.FC<{
         });
     };
 
-    // Show centered processing bubble while waiting for language detection
     if (isProcessing) {
         return (
             <div className="flex w-full justify-center animate-fade-in-up">
-                <div className="p-4 rounded-2xl bg-gray-100 shadow-sm relative streaming-border">
+                <div className="p-4 rounded-2xl bg-gradient-to-br from-gray-50 to-gray-100 shadow-lg border border-gray-200 relative streaming-border">
                     <div className="flex items-center space-x-3 text-gray-500">
                         <div className="animate-spin-slow">
                             <ProcessingIcon className="w-5 h-5" />
@@ -151,20 +145,30 @@ export const ConversationBubble: React.FC<{
                       <span>{message.targetLang}</span>
                     </p>
                     <div className="flex items-center space-x-1">
-                        <button onClick={() => onReplay(message)} className={`p-1 rounded-full hover:bg-black/10 opacity-70 hover:opacity-100`}>
+                        <button 
+                          onClick={() => onReplay(message)} 
+                          className={`p-1 rounded-full hover:bg-black/10 opacity-70 hover:opacity-100 hover:scale-110 active:scale-95 transition-all duration-200`}
+                          aria-label="Replay audio"
+                        >
                             <SpeakerIcon />
                         </button>
-                        <button onClick={handleCopy} className={`p-1 rounded-full hover:bg-black/10 opacity-70 hover:opacity-100`}>
+                        <button 
+                          onClick={handleCopy} 
+                          className={`p-1 rounded-full hover:bg-black/10 opacity-70 hover:opacity-100 hover:scale-110 active:scale-95 transition-all duration-200`}
+                          aria-label="Copy text"
+                        >
                             {isCopied ? <CheckIcon /> : <TextSnippetIcon />}
                         </button>
                     </div>
                 </div>
                 
-                <p className={`text-base min-h-[1.5rem] ${transcriptionColor}`}>
+                <p className={`text-base min-h-[1.5rem] ${transcriptionColor} stagger-text-appear`}>
                     {message.transcription}
+                    {isStreaming && message.transcription && <span className="blinking-cursor">|</span>}
                 </p>
-                <p className={`text-base mt-1 font-medium min-h-[1.5rem] ${translationColor}`}>
+                <p className={`text-base mt-1 font-medium min-h-[1.5rem] ${translationColor} stagger-text-appear-delayed`}>
                     {message.translation}
+                    {isStreaming && message.translation && <span className="blinking-cursor">|</span>}
                 </p>
             </div>
         </div>

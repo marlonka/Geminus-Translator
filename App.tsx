@@ -1,7 +1,3 @@
-
-
-
-
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { GoogleGenAI } from "@google/genai";
 import { useAudioRecorder } from './hooks/useAudioRecorder';
@@ -410,7 +406,11 @@ const App: React.FC = () => {
   };
 
   const QuickSelectButton: React.FC<{ lang: Language, onClick: (lang: Language) => void }> = ({ lang, onClick }) => (
-    <button onClick={() => onClick(lang)} className="flex items-center space-x-4 text-left bg-white text-[#464646] px-4 py-3 rounded-2xl w-full shadow-sm hover:bg-gray-50 transition-colors">
+    <button 
+      onClick={() => onClick(lang)} 
+      className="flex items-center space-x-4 text-left bg-white text-[#464646] px-4 py-3 rounded-2xl w-full shadow-sm hover:bg-gray-50 hover:scale-105 active:scale-95 transition-all duration-200"
+      aria-label={`Quick select ${getLocalizedDisplayName(lang)}`}
+    >
         <HistoryIcon />
         <span className="font-medium">{getLocalizedDisplayName(lang)}</span>
     </button>
@@ -422,7 +422,11 @@ const App: React.FC = () => {
     <>
       <div className="flex flex-col h-full font-sans bg-[#FDFBF6] text-[#464646]">
         <header className="flex items-center justify-between p-2 md:px-4 shrink-0">
-           <button onClick={handleClearConversation} className={`p-2 rounded-full hover:bg-gray-200 transition-colors ${conversation.length > 0 ? 'visible' : 'invisible'}`}>
+           <button 
+             onClick={handleClearConversation} 
+             className={`p-2 rounded-full hover:bg-gray-200 hover:scale-110 active:scale-95 transition-all duration-200 ${conversation.length > 0 ? 'visible' : 'invisible'}`}
+             aria-label="Clear conversation"
+           >
             <BackIcon />
            </button>
            <h1 className="text-sm font-medium tracking-wide text-center">
@@ -489,7 +493,11 @@ const LanguageSelectionModal: React.FC<{isOpen: boolean, onClose: () => void, on
             <div className="bg-white rounded-3xl p-4 w-full max-w-sm m-4 flex flex-col relative animate-modal-content-pop-in" onClick={(e) => e.stopPropagation()}>
                 <div className="flex justify-between items-center mb-4 px-2">
                     <h3 className="text-xl font-medium text-[#464646]">Sprache auswählen</h3>
-                    <button onClick={onClose} className="p-1 rounded-full text-gray-400 hover:bg-gray-200 hover:text-gray-600 transition-colors">
+                    <button 
+                      onClick={onClose} 
+                      className="p-1 rounded-full text-gray-400 hover:bg-gray-200 hover:text-gray-600 hover:scale-110 active:scale-95 transition-all duration-200"
+                      aria-label="Close modal"
+                    >
                         <CloseIcon />
                     </button>
                 </div>
@@ -498,7 +506,8 @@ const LanguageSelectionModal: React.FC<{isOpen: boolean, onClose: () => void, on
                         <button
                             key={lang}
                             onClick={() => onSelect(lang)}
-                            className="w-full p-3 text-left rounded-lg text-[#464646] hover:bg-sky-100 transition-colors"
+                            className="w-full p-3 text-left rounded-lg text-[#464646] hover:bg-sky-100 hover:scale-102 active:scale-98 transition-all duration-150"
+                            aria-label={`Select ${getLocalizedDisplayName(lang)}`}
                         >
                             {getLocalizedDisplayName(lang)}
                         </button>
