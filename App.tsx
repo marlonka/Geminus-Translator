@@ -1,3 +1,5 @@
+
+
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { GoogleGenAI } from "@google/genai";
 import { useAudioRecorder } from './hooks/useAudioRecorder';
@@ -73,6 +75,32 @@ const instructionalPrompts: Record<string, string> = {
 };
 
 
+const disclaimerPrompts: Record<string, string> = {
+    [Language.German]: "KI-gestützte Übersetzung",
+    [Language.English]: "AI-powered translation",
+    [Language.Spanish]: "Traducción impulsada por IA",
+    [Language.French]: "Traduction optimisée par l'IA",
+    [Language.Polish]: "Tłumaczenie wspomagane przez AI",
+    [Language.Turkish]: "Yapay zeka destekli çeviri",
+    [Language.Romanian]: "Traducere bazată pe inteligență artificială",
+    [Language.Arabic]: "ترجمة مدعومة بالذكاء الاصطناعي",
+    [Language.Hindi]: "एआई-संचालित अनुवाद",
+    [Language.Indonesian]: "Terjemahan bertenaga AI",
+    [Language.Italian]: "Traduzione basata su IA",
+    [Language.Japanese]: "AIによる翻訳",
+    [Language.Korean]: "AI 기반 번역",
+    [Language.Portuguese]: "Tradução com tecnologia de IA",
+    [Language.Russian]: "Перевод на базе ИИ",
+    [Language.Dutch]: "AI-aangedreven vertaling",
+    [Language.Thai]: "การแปลภาษาด้วย AI",
+    [Language.Vietnamese]: "Bản dịch được hỗ trợ bởi AI",
+    [Language.Ukrainian]: "Переклад на основі ШІ",
+    [Language.Bengali]: "এআই-চালিত অনুবাদ",
+    [Language.Tamil]: "AI-ஆல் இயங்கும் மொழிபெயர்ப்பு",
+    [Language.Telugu]: "AI- ఆధారిత అనువాదం",
+    [Language.Marathi]: "AI- आधारित भाषांतर",
+};
+
 const germanLanguageMap: Record<string, string> = {
     [Language.English]: "Englisch",
     [Language.German]: "Deutsch",
@@ -122,6 +150,41 @@ const cleanText = (text: string | undefined): string => {
     return cleanedText;
 };
 
+const AnimatedDisclaimerHeader: React.FC<{ langA: Language, langB: Language }> = ({ langA, langB }) => {
+    const [visibleLang, setVisibleLang] = useState<'A' | 'B'>('A');
+
+    useEffect(() => {
+        setVisibleLang('A');
+        const intervalId = setInterval(() => {
+            setVisibleLang(prev => (prev === 'A' ? 'B' : 'A'));
+        }, 4000); // Cycle every 4 seconds
+
+        return () => clearInterval(intervalId);
+    }, [langA, langB]);
+
+    const textA = disclaimerPrompts[langA] || "AI-powered translation";
+    const textB = disclaimerPrompts[langB] || disclaimerPrompts[Language.English];
+
+    return (
+        <div className="relative h-5 w-full text-center text-xs text-gray-500"> {/* Container for positioning */}
+            <div 
+                className="absolute inset-0 flex items-center justify-center transition-opacity duration-700 ease-in-out" 
+                style={{ opacity: visibleLang === 'A' ? 1 : 0 }}
+                aria-hidden={visibleLang !== 'A'}
+            >
+                <span>{textA}</span>
+            </div>
+            <div 
+                className="absolute inset-0 flex items-center justify-center transition-opacity duration-700 ease-in-out" 
+                style={{ opacity: visibleLang === 'B' ? 1 : 0 }}
+                aria-hidden={visibleLang !== 'B'}
+            >
+                <span>{textB}</span>
+            </div>
+        </div>
+    );
+};
+
 const AnimatedInstructionalHeader: React.FC<{ langA: Language, langB: Language }> = ({ langA, langB }) => {
     const [visibleLang, setVisibleLang] = useState<'A' | 'B'>('A');
 
@@ -138,7 +201,7 @@ const AnimatedInstructionalHeader: React.FC<{ langA: Language, langB: Language }
     const textB = instructionalPrompts[langB] || instructionalPrompts[Language.English];
 
     return (
-        <div className="relative h-6 w-64 text-center"> {/* Container for positioning */}
+        <div className="relative h-6 w-full text-center"> {/* Container for positioning */}
             <div 
                 className="absolute inset-0 flex items-center justify-center transition-opacity duration-700 ease-in-out" 
                 style={{ opacity: visibleLang === 'A' ? 1 : 0 }}
@@ -160,8 +223,18 @@ const AnimatedInstructionalHeader: React.FC<{ langA: Language, langB: Language }
 const AppHeader: React.FC<{
   appState: AppState;
   languages: LanguagePair;
-}> = ({ appState, languages }) => {
+  conversationIsEmpty: boolean;
+}> = ({ appState, languages, conversationIsEmpty }) => {
     const lang = languages.langA; // Use primary for non-idle states
+
+    if (appState === AppState.IDLE && conversationIsEmpty) {
+        return (
+            <div className="flex flex-col items-center space-y-1">
+                <AnimatedDisclaimerHeader langA={languages.langA} langB={languages.langB} />
+                <AnimatedInstructionalHeader langA={languages.langA} langB={languages.langB} />
+            </div>
+        );
+    }
 
     switch (appState) {
         case AppState.LISTENING:
@@ -421,7 +494,7 @@ const App: React.FC = () => {
   return (
     <>
       <div className="flex flex-col h-full font-sans bg-[#FDFBF6] text-[#464646]">
-        <header className="flex items-center justify-between p-2 md:px-4 shrink-0">
+        <header className="relative flex items-center justify-between p-2 md:px-4 shrink-0 min-h-16">
            <button 
              onClick={handleClearConversation} 
              className={`p-2 rounded-full hover:bg-gray-200 hover:scale-110 active:scale-95 transition-all duration-200 ${conversation.length > 0 ? 'visible' : 'invisible'}`}
@@ -429,12 +502,15 @@ const App: React.FC = () => {
            >
             <BackIcon />
            </button>
-           <h1 className="text-sm font-medium tracking-wide text-center">
-             <AppHeader 
-                appState={appState}
-                languages={languages}
-             />
-           </h1>
+           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full px-12">
+            <h1 className="text-sm font-medium tracking-wide text-center">
+              <AppHeader 
+                  appState={appState}
+                  languages={languages}
+                  conversationIsEmpty={conversation.length === 0}
+              />
+            </h1>
+           </div>
           <div className="flex items-center w-10">
               {/* Placeholder for alignment */}
           </div>
