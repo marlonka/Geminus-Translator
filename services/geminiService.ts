@@ -59,23 +59,36 @@ export async function transcribeAndTranslateStream(
   const base64Audio = await blobToBase64(audioBlob);
 
   const systemInstruction = `You are an expert audio transcription and translation AI. Your task is to process user-provided audio and stream the results in a specific tagged format.
-- The audio will be in one of two languages: '${langA}' or '${langB}'.
-- First, identify the spoken language. Output it immediately within [LANG] and [/LANG] tags. Example: [LANG]${langA}[/LANG]
-- Second, transcribe the audio into text of the identified language. Stream the transcription as it's generated within [TRANSCRIPTION] and [/TRANSCRIPTION] tags.
-- Third, translate the transcription based on the identified language:
-  * IF the identified language is '${langA}', translate the transcription into '${langB}'
-  * IF the identified language is '${langB}', translate the transcription into '${langA}'
-- Stream the translation within [TRANSLATION] and [/TRANSLATION] tags.
-- The closing tags MUST include a forward slash, like [/TAG]. For example, [/TRANSCRIPTION].
+
+LANGUAGE CONFIGURATION:
+- Language A: '${langA}'
+- Language B: '${langB}'
+- The audio will be spoken in EITHER '${langA}' OR '${langB}'.
+
+YOUR TASK:
+1. IDENTIFY the spoken language. Output it immediately within [LANG] and [/LANG] tags.
+   Example: [LANG]${langA}[/LANG]
+
+2. TRANSCRIBE the audio into text of the identified language within [TRANSCRIPTION] and [/TRANSCRIPTION] tags.
+
+3. TRANSLATE the transcription using these EXACT rules:
+   - IF you identified the language as '${langA}', you MUST translate into '${langB}' (NOT any other language)
+   - IF you identified the language as '${langB}', you MUST translate into '${langA}' (NOT any other language)
+   - Output the translation within [TRANSLATION] and [/TRANSLATION] tags.
 
 CRITICAL RULES:
 - Start streaming your response as soon as possible.
 - Output the [LANG] tag block first and only once. It must be closed with [/LANG].
-- Then, stream the content for [TRANSCRIPTION] and [TRANSLATION] tags as the text becomes available.
-- Ensure all tags are properly closed with a forward slash (e.g., [/TRANSCRIPTION]).
-- The translation MUST be in the correct target language based on the rules above.
+- Then stream [TRANSCRIPTION] and [TRANSLATION] tags as content becomes available.
+- All closing tags MUST include a forward slash: [/TRANSCRIPTION], [/TRANSLATION].
+- The translation MUST be in the target language specified above. DO NOT translate into any third language like English if it's not one of the two configured languages.
 - NEVER repeat words. The transcription and translation must be natural.
-- NEVER use the word "undefined". If audio is unclear, output empty tags like [TRANSCRIPTION][/TRANSCRIPTION].`;
+- NEVER use the word "undefined". If audio is unclear, output empty tags.
+
+EXAMPLE:
+If configured with '${langA}' and '${langB}':
+- Audio in '${langA}' → [LANG]${langA}[/LANG] → Translate to '${langB}'
+- Audio in '${langB}' → [LANG]${langB}[/LANG] → Translate to '${langA}'`;
 
   console.log("Languages:", { from: langA, to: langB });
   console.log("System Instruction:", systemInstruction);
