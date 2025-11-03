@@ -1,8 +1,10 @@
 # Geminus Translator
 
+[https://github.com/marlonka/Geminus-Translator](https://github.com/marlonka/Geminus-Translator)
+
 Geminus Translator is a real-time, voice-driven bilingual conversation app powered by the Google Gemini API. It allows two people speaking different languages to communicate seamlessly. Simply select your languages, press start, and speak into your microphone. The app provides instant transcription and audio translation, displaying the conversation in a clean, chat-like interface.
 
-![Geminus Translator Screenshot](https://storage.googleapis.com/aistudio-o-prd-0-asia-northeast1-b-public/gallery/previews/Geminus-Translator.png)
+![Geminus Translator Screenshot](https://raw.githubusercontent.com/marlonka/Geminus-Translator/refs/heads/main/Screenshot%202025-11-03%20231556.jpg)
 
 ---
 
@@ -80,7 +82,7 @@ To run locally, you would typically follow these steps:
 
 1.  **Clone the repository:**
     ```bash
-    git clone <repository-url>
+    git clone https://github.com/marlonka/Geminus-Translator
     ```
 
 2.  **Install dependencies:**
