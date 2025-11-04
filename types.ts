@@ -27,7 +27,7 @@ export enum Language {
     Bengali = 'Bengali (বাংলা)',
     Tamil = 'Tamil (தமிழ்)',
     Telugu = 'Telugu (తెలుగు)',
-    Marathi = 'Marathi (मరాठी)',
+    Marathi = 'Marathi (మరాठी)',
 }
 
 export enum MessageDirection {
@@ -47,13 +47,14 @@ export interface BaseMessage {
 
 export interface ConversationBubbleMessage extends BaseMessage {
   type: 'CONVERSATION';
-  direction: MessageDirection;
-  sourceLang: string;
-  targetLang: Language | '';
-  transcription: string;
-  translation: string;
-  audioDuration: number; // in ms
+  direction?: MessageDirection;
+  sourceLang?: string;
+  targetLang?: string;
+  transcription?: string;
+  translation?: string;
+  audioDuration?: number;
   base64Audio?: string;
+  isGeneratingAudio?: boolean;
 }
 
 export interface SystemMessage extends BaseMessage {

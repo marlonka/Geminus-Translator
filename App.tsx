@@ -1,7 +1,3 @@
-
-
-
-
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { GoogleGenAI } from "@google/genai";
 import { useAudioRecorder } from './hooks/useAudioRecorder';
@@ -330,7 +326,7 @@ const App: React.FC = () => {
     const initialBubble: ConversationBubbleMessage = {
         id: messageId,
         type: 'CONVERSATION',
-        direction: MessageDirection.RIGHT, // Will be updated by stream
+        direction: MessageDirection.RIGHT,
         sourceLang: '',
         targetLang: '',
         transcription: '',
@@ -390,17 +386,33 @@ const App: React.FC = () => {
             const finalTargetLang = finalSourceLang === languages.langA ? languages.langB : languages.langA;
 
             console.info("[PROCESS] Auto-playback enabled. Generating speech...");
+
+            setConversation(prev =>
+                prev.map(msg =>
+                msg.id === messageId && msg.type === 'CONVERSATION'
+                    ? { ...msg, isGeneratingAudio: true }
+                    : msg
+                )
+            );
+
             generateSpeech(aiRef.current, cleanedTranslation, finalTargetLang)
             .then(audioData => {
                 console.log("[PROCESS] Speech generated. Updating message with audio data.");
                 setConversation(prev => prev.map(msg => 
-                msg.id === messageId && msg.type === 'CONVERSATION' ? { ...msg, base64Audio: audioData } : msg
+                msg.id === messageId && msg.type === 'CONVERSATION' ? { ...msg, base64Audio: audioData, isGeneratingAudio: false } : msg
                 ));
                 playPcmAudio(audioData);
             })
             .catch(e => {
                 console.error("[PROCESS] Failed to generate or play speech.", e);
                 setError("Die Übersetzung konnte nicht wiedergegeben werden.");
+                setConversation(prev =>
+                    prev.map(msg =>
+                    msg.id === messageId && msg.type === 'CONVERSATION'
+                        ? { ...msg, isGeneratingAudio: false }
+                        : msg
+                    )
+                );
             });
         }
 
@@ -478,7 +490,7 @@ const App: React.FC = () => {
   };
 
   const handleReplayAudio = async (message: ConversationBubbleMessage) => {
-    if (!aiRef.current || !message.targetLang) return;
+    if (!aiRef.current || !message.targetLang || !message.translation) return;
     console.groupCollapsed(`[CONTROL] Replaying audio for message ID: ${message.id}`);
     
     if (message.base64Audio) {
