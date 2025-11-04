@@ -147,17 +147,17 @@ export const ConversationBubble: React.FC<{
                     <div className="flex items-center space-x-1">
                         <button 
                           onClick={() => onReplay(message)} 
-                          className={`p-1 rounded-full hover:bg-black/10 opacity-70 hover:opacity-100 hover:scale-110 active:scale-95 transition-all duration-200`}
+                          className="p-2 rounded-full hover:bg-black/10 opacity-70 hover:opacity-100 hover:scale-110 active:scale-95 transition-all duration-200 min-w-[40px] min-h-[40px] flex items-center justify-center"
                           aria-label="Replay audio"
                         >
-                            <SpeakerIcon />
+                            <SpeakerIcon className="w-6 h-6" />
                         </button>
                         <button 
                           onClick={handleCopy} 
-                          className={`p-1 rounded-full hover:bg-black/10 opacity-70 hover:opacity-100 hover:scale-110 active:scale-95 transition-all duration-200`}
+                          className="p-2 rounded-full hover:bg-black/10 opacity-70 hover:opacity-100 hover:scale-110 active:scale-95 transition-all duration-200 min-w-[40px] min-h-[40px] flex items-center justify-center"
                           aria-label="Copy text"
                         >
-                            {isCopied ? <CheckIcon /> : <TextSnippetIcon />}
+                            {isCopied ? <CheckIcon className="w-6 h-6" /> : <TextSnippetIcon className="w-6 h-6" />}
                         </button>
                     </div>
                 </div>
