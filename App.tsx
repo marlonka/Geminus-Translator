@@ -6,6 +6,7 @@ import { BottomControls } from './components/BottomControls';
 import { Language, AppState, ConversationMessage, LanguagePair, MessageDirection, SystemMessage, ConversationBubbleMessage, GeminiAsrResponse } from './types';
 import { transcribeAndTranslateStream, generateSpeech } from './services/geminiService';
 import { playPcmAudio } from './utils/audioUtils';
+import { useNetworkStatus } from './hooks/useNetworkStatus';
 
 // --- SVG Icons ---
 const BackIcon = ({ className = "w-6 h-6" }) => (
@@ -135,15 +136,25 @@ const cleanText = (text: string | undefined): string => {
     if (!text) return "";
 
     let cleanedText = text
-        .replace(/\bundefined\b/gi, '') // More precise "undefined" removal
+        .replace(/\bundefined\b/gi, '')
         .replace(/\s+/g, ' ')
+        .replace(/[^\w\s\u0080-\uFFFF.,!?;:'"-]/g, '') // Remove invalid characters but keep unicode
         .trim();
 
-    // Loop to remove all consecutive duplicates, e.g., "go go go" becomes "go".
-    const duplicateWordRegex = /\b(\w+)\s+\1\b/gi;
-    while (duplicateWordRegex.test(cleanedText)) {
-        cleanedText = cleanedText.replace(duplicateWordRegex, '$1');
+    // Remove consecutive duplicate words more efficiently
+    const words = cleanedText.split(/\s+/);
+    const deduped: string[] = [];
+    
+    for (let i = 0; i < words.length; i++) {
+        if (i === 0 || words[i].toLowerCase() !== words[i-1].toLowerCase()) {
+            deduped.push(words[i]);
+        }
     }
+    
+    cleanedText = deduped.join(' ');
+    
+    // Remove duplicate punctuation
+    cleanedText = cleanedText.replace(/([.!?])\1+/g, '$1');
     
     return cleanedText;
 };
@@ -258,6 +269,159 @@ const App: React.FC = () => {
   const aiRef = useRef<GoogleGenAI | null>(null);
   const prevLangB = useRef(languages.langB);
   const scrollContainerRef = useRef<HTMLElement>(null);
+  const isOnline = useNetworkStatus();
+
+  const handleFinishedRecording = useCallback(async (audioBlob: Blob, duration: number) => {
+    if (!isOnline) {
+        setError("No internet connection. Please check your network and try again.");
+        setAppState(AppState.IDLE);
+        return;
+    }
+
+    setAppState(AppState.PROCESSING);
+    setError(null);
+    
+    if (!aiRef.current) {
+        const errorMsg = "Gemini AI not initialized. Please set API_KEY.";
+        setError(errorMsg);
+        console.error(`[PROCESS] ${errorMsg}`);
+        setAppState(AppState.IDLE);
+        return;
+    }
+
+    const messageId = Date.now();
+    
+    const initialBubble: ConversationBubbleMessage = {
+        id: messageId,
+        type: 'CONVERSATION',
+        direction: MessageDirection.RIGHT,
+        sourceLang: '',
+        targetLang: '',
+        transcription: '',
+        translation: '',
+        audioDuration: duration,
+    };
+
+    setConversation(prev => [...prev, initialBubble]);
+    setStreamingMessageId(messageId);
+
+    try {
+        let finalResult: Partial<GeminiAsrResponse> = {};
+        let hasReceivedData = false;
+
+        await transcribeAndTranslateStream(
+            aiRef.current, 
+            audioBlob, 
+            languages.langA, 
+            languages.langB,
+            (chunk) => {
+                console.log("[STREAM] Received chunk:", chunk);
+                hasReceivedData = true;
+                finalResult = { ...finalResult, ...chunk };
+
+                const sourceLanguage = finalResult.sourceLanguage || languages.langA;
+                const direction = sourceLanguage === languages.langB ? MessageDirection.LEFT : MessageDirection.RIGHT;
+                const targetLang = sourceLanguage === languages.langA ? languages.langB : languages.langA;
+                
+                setConversation(prev => prev.map(msg => 
+                    msg.id === messageId && msg.type === 'CONVERSATION' 
+                    ? { 
+                        ...msg, 
+                        direction,
+                        sourceLang: sourceLanguage,
+                        targetLang,
+                        transcription: finalResult.transcription || '',
+                        translation: finalResult.translation || ''
+                        } 
+                    : msg
+                ));
+            }
+        );
+        
+        if (!hasReceivedData) {
+            throw new Error("No response received from the translation service");
+        }
+        
+        console.log("[PROCESS] Streaming finished. Final result:", finalResult);
+        setStreamingMessageId(null);
+        
+        const cleanedTranscription = cleanText(finalResult.transcription);
+        const cleanedTranslation = cleanText(finalResult.translation);
+
+        if (!cleanedTranscription && !cleanedTranslation) {
+            throw new Error("Could not understand the audio. Please try again.");
+        }
+
+        setConversation(prev => prev.map(msg =>
+            msg.id === messageId && msg.type === 'CONVERSATION'
+                ? { ...msg, transcription: cleanedTranscription, translation: cleanedTranslation }
+                : msg
+        ));
+
+        if (autoPlayback && cleanedTranslation) {
+            const finalSourceLang = finalResult.sourceLanguage || languages.langA;
+            const finalTargetLang = finalSourceLang === languages.langA ? languages.langB : languages.langA;
+
+            console.info("[PROCESS] Auto-playback enabled. Generating speech...");
+
+            setConversation(prev =>
+                prev.map(msg =>
+                msg.id === messageId && msg.type === 'CONVERSATION'
+                    ? { ...msg, isGeneratingAudio: true }
+                    : msg
+                )
+            );
+
+            generateSpeech(aiRef.current, cleanedTranslation, finalTargetLang)
+            .then(audioData => {
+                console.log("[PROCESS] Speech generated. Updating message with audio data.");
+                setConversation(prev => prev.map(msg => 
+                msg.id === messageId && msg.type === 'CONVERSATION' ? { ...msg, base64Audio: audioData, isGeneratingAudio: false } : msg
+                ));
+                return playPcmAudio(audioData);
+            })
+            .catch(e => {
+                console.error("[PROCESS] Failed to generate or play speech.", e);
+                const errorMsg = (e as Error).message || "Could not play the translation.";
+                setError(errorMsg);
+                setConversation(prev =>
+                    prev.map(msg =>
+                    msg.id === messageId && msg.type === 'CONVERSATION'
+                        ? { ...msg, isGeneratingAudio: false }
+                        : msg
+                    )
+                );
+            });
+        }
+
+    } catch (e) {
+        console.error("[PROCESS] Error during stream processing:", e);
+        const error = e as Error;
+        let errorMessage = "Sorry, I didn't understand that. Please try again.";
+        
+        if (error.message.includes('quota') || error.message.includes('rate limit')) {
+            errorMessage = "Service temporarily unavailable. Please try again in a moment.";
+        } else if (error.message.includes('network') || error.message.includes('fetch')) {
+            errorMessage = "Network error. Please check your connection.";
+        } else if (error.message) {
+            errorMessage = error.message;
+        }
+        
+        setError(errorMessage);
+        setConversation(prev => prev.filter(msg => msg.id !== messageId));
+        setStreamingMessageId(null);
+    } finally {
+        setAppState(AppState.IDLE);
+    }
+  }, [autoPlayback, languages, isOnline]);
+  
+  const { isRecording, amplitude, startRecording, stopRecording, error: recorderError } = useAudioRecorder(handleFinishedRecording);
+  
+  useEffect(() => {
+    if (recorderError) {
+      setError(recorderError);
+    }
+  }, [recorderError]);
   
   useEffect(() => {
     if (prevLangB.current !== languages.langB) {
@@ -308,126 +472,6 @@ const App: React.FC = () => {
         console.error("[INIT] API_KEY environment variable not set.");
     }
   }, []);
-  
- const handleFinishedRecording = useCallback(async (audioBlob: Blob, duration: number) => {
-    setAppState(AppState.PROCESSING);
-    setError(null);
-    if (!aiRef.current) {
-        const errorMsg = "Gemini AI not initialized. Please set API_KEY.";
-        setError(errorMsg);
-        console.error(`[PROCESS] ${errorMsg}`);
-        setAppState(AppState.IDLE);
-        return;
-    }
-
-    const messageId = Date.now();
-    
-    // Create an initial processing bubble (centered) for immediate feedback.
-    const initialBubble: ConversationBubbleMessage = {
-        id: messageId,
-        type: 'CONVERSATION',
-        direction: MessageDirection.RIGHT,
-        sourceLang: '',
-        targetLang: '',
-        transcription: '',
-        translation: '',
-        audioDuration: duration,
-    };
-
-    setConversation(prev => [...prev, initialBubble]);
-    setStreamingMessageId(messageId);
-
-    try {
-        let finalResult: Partial<GeminiAsrResponse> = {};
-
-        await transcribeAndTranslateStream(
-            aiRef.current, 
-            audioBlob, 
-            languages.langA, 
-            languages.langB,
-            (chunk) => {
-                console.log("[STREAM] Received chunk:", chunk);
-                finalResult = { ...finalResult, ...chunk };
-
-                const sourceLanguage = finalResult.sourceLanguage || languages.langA;
-                const direction = sourceLanguage === languages.langB ? MessageDirection.LEFT : MessageDirection.RIGHT;
-                const targetLang = sourceLanguage === languages.langA ? languages.langB : languages.langA;
-                
-                setConversation(prev => prev.map(msg => 
-                    msg.id === messageId && msg.type === 'CONVERSATION' 
-                    ? { 
-                        ...msg, 
-                        direction,
-                        sourceLang: sourceLanguage,
-                        targetLang,
-                        transcription: finalResult.transcription || '',
-                        translation: finalResult.translation || ''
-                        } 
-                    : msg
-                ));
-            }
-        );
-        
-        console.log("[PROCESS] Streaming finished. Final result:", finalResult);
-        setStreamingMessageId(null);
-        
-        // Clean up the final text just in case the model includes duplicates despite the prompt.
-        const cleanedTranscription = cleanText(finalResult.transcription);
-        const cleanedTranslation = cleanText(finalResult.translation);
-
-        setConversation(prev => prev.map(msg =>
-            msg.id === messageId && msg.type === 'CONVERSATION'
-                ? { ...msg, transcription: cleanedTranscription, translation: cleanedTranslation }
-                : msg
-        ));
-
-        if (autoPlayback && cleanedTranslation) {
-            const finalSourceLang = finalResult.sourceLanguage || languages.langA;
-            const finalTargetLang = finalSourceLang === languages.langA ? languages.langB : languages.langA;
-
-            console.info("[PROCESS] Auto-playback enabled. Generating speech...");
-
-            setConversation(prev =>
-                prev.map(msg =>
-                msg.id === messageId && msg.type === 'CONVERSATION'
-                    ? { ...msg, isGeneratingAudio: true }
-                    : msg
-                )
-            );
-
-            generateSpeech(aiRef.current, cleanedTranslation, finalTargetLang)
-            .then(audioData => {
-                console.log("[PROCESS] Speech generated. Updating message with audio data.");
-                setConversation(prev => prev.map(msg => 
-                msg.id === messageId && msg.type === 'CONVERSATION' ? { ...msg, base64Audio: audioData, isGeneratingAudio: false } : msg
-                ));
-                playPcmAudio(audioData);
-            })
-            .catch(e => {
-                console.error("[PROCESS] Failed to generate or play speech.", e);
-                setError("Die Übersetzung konnte nicht wiedergegeben werden.");
-                setConversation(prev =>
-                    prev.map(msg =>
-                    msg.id === messageId && msg.type === 'CONVERSATION'
-                        ? { ...msg, isGeneratingAudio: false }
-                        : msg
-                    )
-                );
-            });
-        }
-
-    } catch (e) {
-        console.error("[PROCESS] Error during stream processing:", e);
-        setError("Entschuldigung, das habe ich nicht verstanden. Bitte erneut versuchen.");
-        setConversation(prev => prev.filter(msg => msg.id !== messageId));
-        setStreamingMessageId(null);
-    } finally {
-        setAppState(AppState.IDLE);
-    }
-}, [autoPlayback, languages]);
-
-
-  const { isRecording, amplitude, startRecording, stopRecording } = useAudioRecorder(handleFinishedRecording);
   
   const handleMicToggle = () => {
     if (appState === AppState.LISTENING) {
@@ -526,6 +570,11 @@ const App: React.FC = () => {
 
   return (
     <>
+      {!isOnline && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 text-center text-white p-3 bg-orange-500 rounded-xl shadow-lg animate-fade-in-up z-50">
+          <p className="text-sm">No internet connection</p>
+        </div>
+      )}
       <div className="flex flex-col h-full font-sans bg-[#FDFBF6] text-[#464646]">
         <header className="relative flex items-center justify-between p-2 md:px-4 shrink-0 min-h-16">
            <button 
@@ -572,7 +621,11 @@ const App: React.FC = () => {
             return <ConversationBubble key={msg.id} message={msg} onReplay={handleReplayAudio} isStreaming={streamingMessageId === msg.id} languages={languages} />;
           })}
           <div className="h-4" />
-          {error && <div className="fixed bottom-28 left-1/2 -translate-x-1/2 text-center text-white p-3 bg-[#c3002d] rounded-xl shadow-lg animate-fade-in-up">{error}</div>}
+          {error && (
+            <div className="fixed bottom-28 left-1/2 -translate-x-1/2 text-center text-white p-3 bg-[#c3002d] rounded-xl shadow-lg animate-fade-in-up max-w-sm z-50">
+              <p className="text-sm">{error}</p>
+            </div>
+          )}
         </main>
 
         <BottomControls 
