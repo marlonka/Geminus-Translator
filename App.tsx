@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { GoogleGenAI } from "@google/genai";
 import { useAudioRecorder } from './hooks/useAudioRecorder';
@@ -610,19 +611,25 @@ const App: React.FC = () => {
 
         <main ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 hide-scrollbar">
           {conversation.length === 0 && appState === AppState.IDLE && (
-             <div className="flex flex-col items-center justify-center h-full text-center px-4">
-                <div className="animate-fade-in-up" style={{ animationDuration: '0.5s' }}>
-                  <h2 className="text-4xl font-normal text-[#464646]">{listeningPrompts[languages.langA] || "Translate..."}</h2>
-                  <p className="text-4xl font-normal text-gray-400">{listeningPrompts[languages.langB] || "Translate..."}</p>
-                </div>
-                  <div className="w-full max-w-xs mt-12 space-y-3">
-                    {quickSelectLanguages.map((lang, index) => (
-                      <div key={lang} className="animate-fade-in-up" style={{ animationDelay: `${150 + index * 100}ms`, animationFillMode: 'backwards' }}>
-                        <QuickSelectButton lang={lang} onClick={handleQuickSelect} />
+             <div className="flex flex-col justify-between h-full text-center">
+                {/* Top Group */}
+                <div className="pt-2 md:pt-6">
+                    <div className="animate-fade-in-up" style={{ animationDuration: '0.5s' }}>
+                      <h2 className="text-4xl md:text-5xl font-normal text-[#464646]">{listeningPrompts[languages.langA] || "Translate..."}</h2>
+                      <p className="text-4xl md:text-5xl font-normal text-gray-400">{listeningPrompts[languages.langB] || "Translate..."}</p>
+                    </div>
+                      <div className="w-full max-w-xs mx-auto mt-10 md:mt-12 space-y-3">
+                        {quickSelectLanguages.map((lang, index) => (
+                          <div key={lang} className="animate-fade-in-up" style={{ animationDelay: `${150 + index * 100}ms`, animationFillMode: 'backwards' }}>
+                            <QuickSelectButton lang={lang} onClick={handleQuickSelect} />
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                  <div className="w-full max-w-sm mt-8 animate-fade-in-up" style={{ animationDelay: '450ms', animationFillMode: 'backwards' }}>
+                </div>
+                
+                {/* Bottom Group */}
+                <div className="pb-2">
+                  <div className="w-full max-w-sm mx-auto mt-8 animate-fade-in-up" style={{ animationDelay: '450ms', animationFillMode: 'backwards' }}>
                       <div className="p-4 bg-white/60 backdrop-blur-sm rounded-2xl border border-gray-200/80 shadow-sm space-y-3">
                           <div className="flex justify-center items-center gap-2">
                               <ApiToggle useVertexAI={useVertexAI} onToggle={handleApiToggle} />
@@ -645,6 +652,7 @@ const App: React.FC = () => {
                           </p>
                       </div>
                   </div>
+                </div>
              </div>
           )}
           {conversation.map((msg) => {
