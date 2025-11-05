@@ -3,7 +3,9 @@ import { GoogleGenAI } from "@google/genai";
 import { useAudioRecorder } from './hooks/useAudioRecorder';
 import { ConversationBubble } from './components/ConversationBubble';
 import { BottomControls } from './components/BottomControls';
-import { Language, AppState, ConversationMessage, LanguagePair, MessageDirection, SystemMessage, ConversationBubbleMessage, GeminiAsrResponse } from './types';
+import { ApiToggle } from './components/ApiToggle';
+import { RegionSelector } from './components/RegionSelector';
+import { Language, AppState, ConversationMessage, LanguagePair, MessageDirection, SystemMessage, ConversationBubbleMessage, GeminiAsrResponse, VertexRegion } from './types';
 import { transcribeAndTranslateStream, generateSpeech } from './services/geminiService';
 import { playPcmAudio } from './utils/audioUtils';
 
@@ -258,6 +260,9 @@ const App: React.FC = () => {
   const aiRef = useRef<GoogleGenAI | null>(null);
   const prevLangB = useRef(languages.langB);
   const scrollContainerRef = useRef<HTMLElement>(null);
+  const [useVertexAI, setUseVertexAI] = useState(false);
+  const [apiStatusMessage, setApiStatusMessage] = useState('');
+  const [vertexRegion, setVertexRegion] = useState<VertexRegion>('europe-west4');
   
   useEffect(() => {
     if (prevLangB.current !== languages.langB) {
@@ -301,19 +306,44 @@ const App: React.FC = () => {
 
   
   useEffect(() => {
-    if (process.env.API_KEY) {
-        aiRef.current = new GoogleGenAI({ apiKey: process.env.API_KEY });
-        console.info("[INIT] GoogleGenAI initialized successfully.");
-    } else {
-        console.error("[INIT] API_KEY environment variable not set.");
+    try {
+        aiRef.current = null; // Reset before initializing
+        if (useVertexAI) {
+            const projectId = process.env.GOOGLE_CLOUD_PROJECT;
+            if (projectId) {
+                aiRef.current = new GoogleGenAI({
+                    vertexai: true,
+                    project: projectId,
+                    location: vertexRegion,
+                });
+                console.info(`[INIT] Vertex AI client initialized successfully for project: ${projectId}, region: ${vertexRegion}`);
+                setApiStatusMessage(`Connected to ${vertexRegion}`);
+            } else {
+                console.error("[INIT] GOOGLE_CLOUD_PROJECT environment variable not set for Vertex AI mode.");
+                setApiStatusMessage('Project ID missing');
+            }
+        } else {
+            if (process.env.API_KEY) {
+                aiRef.current = new GoogleGenAI({ apiKey: process.env.API_KEY });
+                console.info("[INIT] Gemini API client initialized successfully.");
+                setApiStatusMessage('Connected');
+            } else {
+                console.error("[INIT] API_KEY environment variable not set for Gemini API mode.");
+                setApiStatusMessage('API Key missing');
+            }
+        }
+    } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        console.error(`[INIT] Failed to initialize AI client:`, message);
+        setApiStatusMessage('Initialization failed');
     }
-  }, []);
+  }, [useVertexAI, vertexRegion]);
   
  const handleFinishedRecording = useCallback(async (audioBlob: Blob, duration: number) => {
     setAppState(AppState.PROCESSING);
     setError(null);
     if (!aiRef.current) {
-        const errorMsg = "Gemini AI not initialized. Please set API_KEY.";
+        const errorMsg = "Gemini AI not initialized. Please check API configuration.";
         setError(errorMsg);
         console.error(`[PROCESS] ${errorMsg}`);
         setAppState(AppState.IDLE);
@@ -430,14 +460,15 @@ const App: React.FC = () => {
   const { isRecording, amplitude, startRecording, stopRecording } = useAudioRecorder(handleFinishedRecording);
   
   const handleMicToggle = () => {
+    if (!aiRef.current) {
+        setError(useVertexAI ? "Vertex AI client not initialized. Check GOOGLE_CLOUD_PROJECT." : "Gemini API client not initialized. Check API_KEY.");
+        return;
+    }
+      
     if (appState === AppState.LISTENING) {
       console.log("[CONTROL] Mic toggled: Stopping recording.");
       stopRecording();
     } else if (appState === AppState.IDLE) {
-      if (!process.env.API_KEY) {
-        setError("API_KEY environment variable not set.");
-        return;
-      }
       console.log("[CONTROL] Mic toggled: Starting recording.");
       setError(null);
       startRecording();
@@ -489,6 +520,33 @@ const App: React.FC = () => {
     setAppState(AppState.IDLE);
   };
 
+  const handleApiToggle = () => {
+      const switchingToVertex = !useVertexAI;
+      setUseVertexAI(switchingToVertex);
+      if (conversation.length > 0) {
+        const newMessage: SystemMessage = {
+            id: Date.now(),
+            type: 'SYSTEM',
+            text: `Switched to ${switchingToVertex ? `Vertex AI (${vertexRegion})` : 'Gemini API'}`,
+        };
+        setConversation(prev => [...prev, newMessage]);
+      }
+      console.log(`[CONTROL] Switched API to: ${switchingToVertex ? `Vertex AI (${vertexRegion})` : 'Gemini API'}`);
+  };
+
+  const handleRegionChange = (newRegion: VertexRegion) => {
+    setVertexRegion(newRegion);
+    if (conversation.length > 0) {
+        const newMessage: SystemMessage = {
+            id: Date.now(),
+            type: 'SYSTEM',
+            text: `Switched Vertex AI region to ${newRegion}`,
+        };
+        setConversation(prev => [...prev, newMessage]);
+    }
+    console.log(`[CONTROL] Switched Vertex AI region to: ${newRegion}`);
+  };
+
   const handleReplayAudio = async (message: ConversationBubbleMessage) => {
     if (!aiRef.current || !message.targetLang || !message.translation) return;
     console.groupCollapsed(`[CONTROL] Replaying audio for message ID: ${message.id}`);
@@ -523,6 +581,7 @@ const App: React.FC = () => {
   );
 
   const quickSelectLanguages = [Language.Polish, Language.Turkish, Language.Romanian];
+  const isApiError = apiStatusMessage.includes('missing') || apiStatusMessage.includes('failed');
 
   return (
     <>
@@ -544,8 +603,8 @@ const App: React.FC = () => {
               />
             </h1>
            </div>
-          <div className="flex items-center w-10">
-              {/* Placeholder for alignment */}
+          <div className="flex items-center">
+              {/* ApiToggle is now moved to the idle screen content */}
           </div>
         </header>
 
@@ -562,6 +621,29 @@ const App: React.FC = () => {
                         <QuickSelectButton lang={lang} onClick={handleQuickSelect} />
                       </div>
                     ))}
+                  </div>
+                  <div className="w-full max-w-sm mt-8 animate-fade-in-up" style={{ animationDelay: '450ms', animationFillMode: 'backwards' }}>
+                      <div className="p-4 bg-white/60 backdrop-blur-sm rounded-2xl border border-gray-200/80 shadow-sm space-y-3">
+                          <div className="flex justify-center items-center gap-2">
+                              <ApiToggle useVertexAI={useVertexAI} onToggle={handleApiToggle} />
+                              {useVertexAI && (
+                                <RegionSelector 
+                                    currentRegion={vertexRegion} 
+                                    onRegionChange={handleRegionChange} 
+                                />
+                              )}
+                          </div>
+                          <p className="text-xs text-gray-600 leading-relaxed text-center">
+                              <span className={`font-medium ${isApiError ? 'text-[#c3002d]' : ''}`}>
+                                  Status: {apiStatusMessage}
+                              </span>
+                              <br />
+                              {useVertexAI
+                                  ? "Vertex AI offers enterprise-grade features and Google Cloud integration."
+                                  : "Gemini API provides fast, direct access for development and prototyping."
+                              }
+                          </p>
+                      </div>
                   </div>
              </div>
           )}

@@ -35,6 +35,8 @@ export enum MessageDirection {
     RIGHT = 'RIGHT',
 }
 
+export type VertexRegion = 'europe-west4' | 'europe-west1' | 'us-west1';
+
 export interface LanguagePair {
     langA: Language;
     langB: Language;
