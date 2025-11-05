@@ -1,1 +1,10 @@
-��^�j�W�����Zj�
+node_modules
+npm-debug.log
+.env
+.env.local
+.git
+.gitignore
+README.md
+.DS_Store
+dist
+build
