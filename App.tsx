@@ -1,21 +1,18 @@
 
-
-
-
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { GoogleGenAI, Chat } from "@google/genai";
+// FIX: Renamed imported `Chat` type to `GenAIChat` to avoid conflict with the `Chat` component.
+import { GoogleGenAI, Chat as GenAIChat } from "@google/genai";
 import { useAudioRecorder } from './hooks/useAudioRecorder';
 import { AppState, UploadedImage, AnalysisReport, ChatMessage, MessageRole } from './types';
 import { analyzeImages, generateSpeech } from './services/geminiService';
 import { playPcmAudio } from './utils/audioUtils';
 
-// FIX: Defined AIStudio interface to resolve subsequent property declaration error.
-interface AIStudio {
-  hasSelectedApiKey: () => Promise<boolean>;
-  openSelectKey: () => Promise<void>;
-}
-
+// FIX: Moved AIStudio interface into `declare global` to resolve module-scope vs global-scope conflict.
 declare global {
+  interface AIStudio {
+    hasSelectedApiKey: () => Promise<boolean>;
+    openSelectKey: () => Promise<void>;
+  }
   interface Window {
     aistudio?: AIStudio;
   }
@@ -456,7 +453,8 @@ const Chat = React.memo(function Chat({ reportMarkdown }: { reportMarkdown: stri
     const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
-    const chatRef = useRef<Chat | null>(null);
+    // FIX: Use the renamed `GenAIChat` type here.
+    const chatRef = useRef<GenAIChat | null>(null);
 
     const initializeChat = useCallback(() => {
         if (!process.env.API_KEY) {
@@ -947,8 +945,8 @@ const App: React.FC = () => {
             if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
             const message = e instanceof Error ? e.message : "Unbekannter Fehler";
 
-            if (message.includes('API key not valid') || message.includes('not found') || message.includes('Failed to get upload url')) {
-                setError(`API-Schlüsselproblem: ${message}. Bitte versuchen Sie, einen anderen Schlüssel auszuwählen.`);
+            if (message.includes('API key not valid') || message.includes('not found') || message.includes('Failed to get upload url') || message.includes('API key expired')) {
+                setError(`API-Schlüsselproblem: Der bereitgestellte Schlüssel ist möglicherweise abgelaufen oder ungültig. Bitte wählen Sie einen anderen Schlüssel aus.`);
                 setHasApiKey(false); 
                 setAppState(AppState.UPLOAD);
                 setProgress(0);
