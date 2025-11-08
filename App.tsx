@@ -1,11 +1,25 @@
 
 
+
+
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { GoogleGenAI, Chat } from "@google/genai";
 import { useAudioRecorder } from './hooks/useAudioRecorder';
 import { AppState, UploadedImage, AnalysisReport, ChatMessage, MessageRole } from './types';
 import { analyzeImages, generateSpeech } from './services/geminiService';
 import { playPcmAudio } from './utils/audioUtils';
+
+// FIX: Defined AIStudio interface to resolve subsequent property declaration error.
+interface AIStudio {
+  hasSelectedApiKey: () => Promise<boolean>;
+  openSelectKey: () => Promise<void>;
+}
+
+declare global {
+  interface Window {
+    aistudio?: AIStudio;
+  }
+}
 
 // --- Helper Functions & Constants ---
 const USD_TO_EUR_RATE = 0.86; // As per user request: 1 USD = 0.86 EUR
@@ -264,6 +278,41 @@ const Icons = {
 
 // --- App Components ---
 
+const ApiKeySelector: React.FC<{ onKeySelected: () => void }> = ({ onKeySelected }) => {
+    const handleSelectKey = async () => {
+        if (window.aistudio && typeof window.aistudio.openSelectKey === 'function') {
+            try {
+                await window.aistudio.openSelectKey();
+                onKeySelected();
+            } catch (e) {
+                console.error("Error opening key selector:", e);
+            }
+        }
+    };
+
+    return (
+        <div className="h-full w-full flex items-center justify-center bg-gray-100 p-4">
+            <div className="bg-white/80 backdrop-blur-sm p-8 sm:p-10 rounded-3xl shadow-lg animate-fade-in-up border border-gray-200 text-center max-w-lg">
+                <Icons.GlobeLock className="w-14 h-14 text-emerald-700 mx-auto" />
+                <h2 className="text-2xl sm:text-3xl font-bold text-emerald-800 mt-4">API-Schlüssel erforderlich</h2>
+                <p className="text-gray-600 mt-4 text-sm sm:text-base">
+                    Für den Datei-Upload und die Analyse ist ein API-Schlüssel mit aktivierter Abrechnung erforderlich. Bitte wählen Sie einen Schlüssel aus, um fortzufahren. Die Nutzung der Files API kann Kosten verursachen.
+                </p>
+                <button
+                    onClick={handleSelectKey}
+                    className="mt-8 w-full bg-emerald-600 text-white font-semibold py-3 px-6 rounded-lg shadow-md hover:bg-emerald-700 transition-all duration-300 transform hover:scale-102 active:scale-98"
+                >
+                    API-Schlüssel auswählen
+                </button>
+                <p className="text-xs text-gray-500 mt-4">
+                    Weitere Informationen zur Abrechnung finden Sie in der <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noopener noreferrer" className="text-emerald-700 underline hover:text-emerald-800">offiziellen Dokumentation</a>.
+                </p>
+            </div>
+        </div>
+    );
+};
+
+
 const UploadView: React.FC<{ onFilesSelected: (files: FileList) => void }> = ({ onFilesSelected }) => {
     const [isDragging, setIsDragging] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
@@ -407,20 +456,14 @@ const Chat = React.memo(function Chat({ reportMarkdown }: { reportMarkdown: stri
     const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
     const scrollRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
-    const aiRef = useRef<GoogleGenAI | null>(null);
     const chatRef = useRef<Chat | null>(null);
 
-    // Effect to initialize AI client once
-    useEffect(() => {
-        if (process.env.API_KEY) {
-            aiRef.current = new GoogleGenAI({ apiKey: process.env.API_KEY });
-        } else {
-            console.error("API Key not found");
-        }
-    }, []);
-
     const initializeChat = useCallback(() => {
-        if (!aiRef.current) return;
+        if (!process.env.API_KEY) {
+            console.error("API Key not found for chat initialization.");
+            return;
+        }
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         
         const initialHistory = [
             { role: "user" as const, parts: [{ text: `Ich habe dir Bilder aus meinem Wald zur Analyse gegeben. Der von dir erstellte Bericht war:\n\n${reportMarkdown}` }] },
@@ -439,7 +482,7 @@ const Chat = React.memo(function Chat({ reportMarkdown }: { reportMarkdown: stri
             thinkingConfig: { thinkingBudget: 24576 }
         };
 
-        chatRef.current = aiRef.current.chats.create({
+        chatRef.current = ai.chats.create({
             model: 'gemini-2.5-flash',
             history: initialHistory,
             config: config
@@ -461,10 +504,11 @@ const Chat = React.memo(function Chat({ reportMarkdown }: { reportMarkdown: stri
     }, [inputText]);
 
     const handlePlayAudio = useCallback(async (text: string, messageId: string) => {
-        if (playingAudioId || generatingAudioId || !aiRef.current) return;
+        if (playingAudioId || generatingAudioId || !process.env.API_KEY) return;
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         setGeneratingAudioId(messageId);
         try {
-            const audioData = await generateSpeech(aiRef.current, text);
+            const audioData = await generateSpeech(ai, text);
             setPlayingAudioId(messageId);
             await playPcmAudio(audioData);
         } catch (error) {
@@ -514,11 +558,12 @@ const Chat = React.memo(function Chat({ reportMarkdown }: { reportMarkdown: stri
 
     const handleFinishedRecording = async (audioBlob: Blob) => {
         setIsListening(false);
-        if (!aiRef.current) return;
+        if (!process.env.API_KEY) return;
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         setIsProcessing(true);
         try {
             const base64Audio = await blobToBase64(audioBlob);
-            const response = await aiRef.current.models.generateContent({
+            const response = await ai.models.generateContent({
               model: "gemini-2.5-flash",
               contents: [{
                 parts: [
@@ -794,29 +839,37 @@ const App: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [progress, setProgress] = useState(0);
     const [progressText, setProgressText] = useState('Analysiere Bilder...');
-    const aiRef = useRef<GoogleGenAI | null>(null);
+    const [hasApiKey, setHasApiKey] = useState(false);
     const progressIntervalRef = useRef<number | null>(null);
 
     useEffect(() => {
-        try {
-            if (process.env.API_KEY) {
-                aiRef.current = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const checkApiKey = async () => {
+            if (window.aistudio && typeof window.aistudio.hasSelectedApiKey === 'function') {
+                const keySelected = await window.aistudio.hasSelectedApiKey();
+                setHasApiKey(keySelected);
             } else {
-                setError("API-Schlüssel nicht konfiguriert.");
+                setHasApiKey(!!process.env.API_KEY);
             }
-        } catch (e) {
-            setError("Initialisierung des AI-Clients fehlgeschlagen.");
-        }
+        };
+        checkApiKey();
+        
         return () => {
             if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
         }
     }, []);
 
+    const handleKeySelected = () => {
+        setHasApiKey(true);
+    };
+
     const handleFilesSelected = useCallback(async (selectedFiles: FileList) => {
-        if (!aiRef.current) {
-            setError("AI Client ist nicht bereit.");
+        if (!process.env.API_KEY) {
+            setError("API-Schlüssel nicht konfiguriert. Bitte wählen Sie einen Schlüssel aus.");
+            setHasApiKey(false);
             return;
         }
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
         setError(null);
         setProgress(0);
         setAppState(AppState.PROCESSING);
@@ -842,7 +895,7 @@ const App: React.FC = () => {
             
             let completedUploads = 0;
             const uploadPromises = initialImages.map(async (img) => {
-                const uploadedFile = await aiRef.current!.files.upload({
+                const uploadedFile = await ai.files.upload({
                     file: img.file,
                     config: { mimeType: img.file.type, displayName: img.file.name },
                 });
@@ -850,14 +903,13 @@ const App: React.FC = () => {
                 let file = uploadedFile;
                 while (file.state === 'PROCESSING') {
                     await new Promise(resolve => setTimeout(resolve, 1000));
-                    file = await aiRef.current!.files.get({ name: file.name });
+                    file = await ai.files.get({ name: file.name });
                 }
     
                 if (file.state !== 'ACTIVE') {
                     throw new Error(`Datei ${img.file.name} konnte nicht verarbeitet werden. Status: ${file.state}`);
                 }
     
-                // This will be called in parallel, so update progress safely
                 completedUploads++;
                 setProgress((completedUploads / initialImages.length) * 0.5);
     
@@ -869,7 +921,7 @@ const App: React.FC = () => {
             
             setProgressText("Analysiere Bilder...");
             
-            const duration = 60000; // Pro mode is default
+            const duration = 60000;
             const tickRate = 100;
             const increment = (0.5 / (duration / tickRate));
             
@@ -884,7 +936,7 @@ const App: React.FC = () => {
                 });
             }, tickRate);
     
-            const report = await analyzeImages(aiRef.current, uploadedImagesWithUris, true);
+            const report = await analyzeImages(ai, uploadedImagesWithUris, true);
             
             if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
             setProgress(1);
@@ -894,6 +946,15 @@ const App: React.FC = () => {
         } catch (e) {
             if (progressIntervalRef.current) clearInterval(progressIntervalRef.current);
             const message = e instanceof Error ? e.message : "Unbekannter Fehler";
+
+            if (message.includes('API key not valid') || message.includes('not found') || message.includes('Failed to get upload url')) {
+                setError(`API-Schlüsselproblem: ${message}. Bitte versuchen Sie, einen anderen Schlüssel auszuwählen.`);
+                setHasApiKey(false); 
+                setAppState(AppState.UPLOAD);
+                setProgress(0);
+                return;
+            }
+
             setError(`Vorgang fehlgeschlagen: ${message}`);
             setAppState(AppState.UPLOAD);
             setProgress(0);
@@ -902,7 +963,7 @@ const App: React.FC = () => {
                 console.log("Cleaning up uploaded files in background...");
                 Promise.all(uploadedImagesWithUris.map(img => {
                     if (img.fileNameApi) {
-                        return aiRef.current!.files.delete({ name: img.fileNameApi });
+                        return ai.files.delete({ name: img.fileNameApi });
                     }
                     return Promise.resolve();
                 })).then(() => {
@@ -922,6 +983,10 @@ const App: React.FC = () => {
         setProgress(0);
         setAppState(AppState.UPLOAD);
     };
+    
+    if (!hasApiKey) {
+        return <ApiKeySelector onKeySelected={handleKeySelected} />;
+    }
 
     const renderContent = () => {
         switch (appState) {
