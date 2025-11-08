@@ -1,6 +1,6 @@
 {
-  "name": "Geminus Translator",
-  "description": "A real-time bilingual conversation app powered by Gemini. Speak into your microphone and get instant audio translations, enabling seamless communication across languages.",
+  "name": "KI-Wildtieranalyse für Förster",
+  "description": "Gemini 2.5-gestützte Wildtieranalyse für Förster via Bild-Upload mit detailliertem Reporting und interaktivem Sprach- & Such-Dialog.",
   "requestFramePermissions": [
     "microphone"
   ]
